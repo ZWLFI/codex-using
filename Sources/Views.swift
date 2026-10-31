@@ -25,12 +25,12 @@ extension RiskLevel {
 extension View {
     func quotaCard(cornerRadius: CGFloat = 16) -> some View {
         self
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [.white.opacity(0.20), .white.opacity(0.035), .blue.opacity(0.035)],
+                            colors: [.white.opacity(0.24), .white.opacity(0.05), .clear],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -40,14 +40,115 @@ extension View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(
                         LinearGradient(
-                            colors: [.white.opacity(0.52), .white.opacity(0.10), .primary.opacity(0.08)],
+                            colors: [.white.opacity(0.60), .white.opacity(0.14), .primary.opacity(0.12)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 0.7
+                        lineWidth: 0.8
                     )
             }
-            .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 7)
+            .shadow(color: .black.opacity(0.13), radius: 14, x: 0, y: 7)
+    }
+}
+
+struct NativeGlassBackground: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.material = material
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+    }
+}
+
+struct GlassBackdrop: View {
+    let material: NSVisualEffectView.Material
+
+    var body: some View {
+        ZStack {
+            NativeGlassBackground(material: material)
+            LinearGradient(
+                colors: [.white.opacity(0.17), .clear, .black.opacity(0.055)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                colors: [.blue.opacity(0.10), .clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 380
+            )
+        }
+    }
+}
+
+enum StatusItemArtwork {
+    static func image(style: MenuDisplayStyle, remaining: Double?, resetDate: Date?) -> NSImage {
+        let percent = DisplayFormat.percent(remaining)
+        switch style {
+        case .compact:
+            return oneLine(percent)
+        case .standard:
+            return twoLine(top: "GPT", bottom: percent, width: 36)
+        case .full:
+            return twoLine(top: "GPT", bottom: "\(percent) · \(shortReset(resetDate))", width: 62)
+        }
+    }
+
+    private static func oneLine(_ text: String) -> NSImage {
+        let width = max(30, CGFloat(text.count) * 8)
+        return templateImage(width: width, height: 22) { rect in
+            draw(
+                text,
+                in: rect.insetBy(dx: 0, dy: 3),
+                font: .monospacedDigitSystemFont(ofSize: 11.5, weight: .bold)
+            )
+        }
+    }
+
+    private static func twoLine(top: String, bottom: String, width: CGFloat) -> NSImage {
+        templateImage(width: width, height: 22) { _ in
+            draw(top, in: NSRect(x: 0, y: 0, width: width, height: 9), font: .systemFont(ofSize: 7.2, weight: .medium))
+            draw(bottom, in: NSRect(x: 0, y: 8, width: width, height: 14), font: .monospacedDigitSystemFont(ofSize: 11.2, weight: .bold))
+        }
+    }
+
+    private static func templateImage(
+        width: CGFloat,
+        height: CGFloat,
+        drawing: @escaping (NSRect) -> Void
+    ) -> NSImage {
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: true) { rect in
+            drawing(rect)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    private static func draw(_ text: String, in rect: NSRect, font: NSFont) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        (text as NSString).draw(
+            in: rect,
+            withAttributes: [
+                .font: font,
+                .foregroundColor: NSColor.black,
+                .paragraphStyle: paragraph
+            ]
+        )
+    }
+
+    private static func shortReset(_ date: Date?) -> String {
+        guard let date else { return "—" }
+        let hours = max(0, Int(date.timeIntervalSinceNow / 3_600))
+        return hours >= 24 ? "\(hours / 24)d" : "\(hours)h"
     }
 }
 
@@ -57,27 +158,12 @@ struct StatusLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Group {
-            switch settings.menuStyle {
-            case .compact:
-                Text(DisplayFormat.percent(model.remainingPercent))
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-            case .standard, .full:
-                VStack(alignment: .leading, spacing: -3) {
-                    HStack(spacing: 3) {
-                        Text(settings.menuStyle == .full ? "GPT · \(shortReset)" : "GPT")
-                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
-                        Circle()
-                            .fill(model.risk.color)
-                            .frame(width: 4, height: 4)
-                    }
-                    Text(DisplayFormat.percent(model.remainingPercent))
-                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                }
-                .frame(minWidth: settings.menuStyle == .full ? 54 : 35, alignment: .leading)
-            }
-        }
+        Image(nsImage: StatusItemArtwork.image(
+            style: settings.menuStyle,
+            remaining: model.remainingPercent,
+            resetDate: model.selectedWindow?.resetDate
+        ))
+        .interpolation(.high)
         .frame(height: 22)
         .onAppear {
             model.start()
@@ -88,12 +174,6 @@ struct StatusLabel: View {
         }
         .accessibilityLabel("GPT 用量，剩余 \(DisplayFormat.percent(model.remainingPercent))，\(model.risk.title)")
     }
-
-    private var shortReset: String {
-        guard let date = model.selectedWindow?.resetDate else { return "—" }
-        let hours = max(0, Int(date.timeIntervalSinceNow / 3_600))
-        return hours >= 24 ? "\(hours / 24)d" : "\(hours)h"
-    }
 }
 
 struct MenuBarContentView: View {
@@ -103,82 +183,68 @@ struct MenuBarContentView: View {
 
     var body: some View {
         ZStack {
-            Rectangle().fill(.ultraThinMaterial)
-            Circle()
-                .fill(.blue.opacity(0.22))
-                .frame(width: 260, height: 260)
-                .blur(radius: 72)
-                .offset(x: -170, y: -250)
-            Circle()
-                .fill(.cyan.opacity(0.16))
-                .frame(width: 220, height: 220)
-                .blur(radius: 76)
-                .offset(x: 170, y: 80)
-            Circle()
-                .fill(.purple.opacity(0.10))
-                .frame(width: 190, height: 190)
-                .blur(radius: 72)
-                .offset(x: -120, y: 280)
-            LinearGradient(
-                colors: [.white.opacity(0.12), .clear, .black.opacity(0.025)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            GlassBackdrop(material: .popover)
 
-            ScrollView {
-                VStack(spacing: 12) {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 10) {
                     header
                     quotaHero
                     metrics
-                    MiniUsageChart(points: model.dayPoints7, coverageText: model.coverageText)
-                    insight
+                    MiniUsageChart(
+                        points: model.dayPoints7,
+                        coverageText: model.coverageText,
+                        insight: model.insight
+                    )
                     footer
                 }
-                .padding(15)
+                .padding(.horizontal, 14)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
             }
         }
-        .frame(width: 430, height: 610)
+        .frame(width: 400, height: 480)
     }
 
     private var header: some View {
         VStack(spacing: 9) {
             HStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [.blue, .cyan.opacity(0.82)],
+                                colors: [.blue, .cyan],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                     Image(systemName: "gauge.with.dots.needle.67percent")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-                .frame(width: 38, height: 38)
-                .shadow(color: .blue.opacity(0.28), radius: 9, y: 4)
+                .frame(width: 34, height: 34)
+                .shadow(color: .blue.opacity(0.28), radius: 8, y: 4)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("GPT 用量")
-                        .font(.system(size: 15.5, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                     Text("\(model.selectedBucket?.displayName ?? "Codex") · \(model.selectedBucket?.planName ?? "ChatGPT")")
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Label(model.risk.title, systemImage: model.risk.symbol)
-                    .font(.system(size: 9.5, weight: .semibold))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(model.risk.color)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay { Capsule().stroke(model.risk.color.opacity(0.20), lineWidth: 0.6) }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(.thinMaterial, in: Capsule())
+                    .overlay { Capsule().stroke(model.risk.color.opacity(0.28), lineWidth: 0.7) }
                 Button(action: model.refresh) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 12, weight: .semibold))
                         .frame(width: 28, height: 28)
-                        .background(.ultraThinMaterial, in: Circle())
+                        .background(.thinMaterial, in: Circle())
+                        .overlay { Circle().stroke(.white.opacity(0.40), lineWidth: 0.7) }
                         .rotationEffect(model.isRefreshing ? .degrees(360) : .zero)
                         .animation(model.isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: model.isRefreshing)
                 }
@@ -202,25 +268,30 @@ struct MenuBarContentView: View {
     }
 
     private var quotaHero: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .stroke(.primary.opacity(0.075), lineWidth: 9)
+                    .stroke(.primary.opacity(0.09), lineWidth: 8)
                 Circle()
                     .trim(from: 0, to: CGFloat((model.remainingPercent ?? 0) / 100))
                     .stroke(
-                        AngularGradient(colors: [.blue, .cyan, .mint, .blue], center: .center),
-                        style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                        AngularGradient(colors: [.blue, .cyan, .blue], center: .center),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                    .shadow(color: .cyan.opacity(0.28), radius: 7)
+                    .shadow(color: .blue.opacity(0.30), radius: 6)
                 Circle()
-                    .fill(.ultraThinMaterial)
-                    .padding(13)
+                    .fill(.thinMaterial)
+                    .padding(12)
+                    .overlay {
+                        Circle()
+                            .stroke(.white.opacity(0.34), lineWidth: 0.7)
+                            .padding(12)
+                    }
                 VStack(spacing: -2) {
                     HStack(alignment: .lastTextBaseline, spacing: 2) {
                         Text(model.remainingPercent.map { String(Int($0.rounded())) } ?? "—")
-                            .font(.system(size: 27, weight: .bold, design: .rounded))
+                            .font(.system(size: 25, weight: .bold, design: .rounded))
                             .monospacedDigit()
                         if model.remainingPercent != nil {
                             Text("%")
@@ -233,16 +304,16 @@ struct MenuBarContentView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 108, height: 108)
+            .frame(width: 98, height: 98)
             .accessibilityLabel("剩余配额 \(DisplayFormat.percent(model.remainingPercent))")
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 7) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("当前配额窗口")
+                    Text("本周期剩余")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                     Text("\(DisplayFormat.countdown(to: model.selectedWindow?.resetDate)) 后重置")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
                 HStack(spacing: 6) {
@@ -253,25 +324,31 @@ struct MenuBarContentView: View {
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(model.forecast?.exhaustsBeforeReset == true ? Color.red : Color.secondary)
                 .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(.primary.opacity(0.045), in: Capsule())
+                .padding(.vertical, 5)
+                .background(.regularMaterial, in: Capsule())
+                .overlay { Capsule().stroke(.white.opacity(0.28), lineWidth: 0.6) }
 
-                HStack(spacing: 5) {
+                HStack(spacing: 6) {
                     Text("已使用 \(DisplayFormat.percent(model.usedPercent))")
-                    Text("·")
-                    Text((model.selectedWindow?.resetDate).map { DisplayFormat.dateTime.string(from: $0) } ?? "等待更新")
+                    if model.resetCredits > 0 {
+                        Text("·")
+                        Label("重置券 \(model.resetCredits)", systemImage: "arrow.counterclockwise.circle")
+                    }
                 }
                 .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(17)
-        .quotaCard(cornerRadius: 23)
+        .padding(15)
+        .quotaCard(cornerRadius: 22)
     }
 
     private var metrics: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+        LazyVGrid(
+            columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+            spacing: 8
+        ) {
             MetricTile(
                 icon: "calendar",
                 title: "最近完整日",
@@ -290,63 +367,42 @@ struct MenuBarContentView: View {
                 value: model.summary?.currentStreakDays.map { "\($0) 天" } ?? "—",
                 subtitle: "最长 \(model.summary?.longestStreakDays.map(String.init) ?? "—") 天"
             )
-            MetricTile(
-                icon: "arrow.counterclockwise.circle.fill",
-                title: "重置券",
-                value: "\(model.resetCredits) 张",
-                subtitle: model.resetCredits > 0 ? "只读展示" : "当前无可用"
-            )
         }
-    }
-
-    private var insight: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: "sparkles")
-                .foregroundStyle(.blue)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("用量洞察")
-                    .font(.system(size: 10.5, weight: .semibold))
-                Text(model.insight)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .quotaCard()
     }
 
     private var footer: some View {
-        VStack(spacing: 9) {
-            HStack {
-                Circle()
-                    .fill(model.lastError == nil ? (model.dataIsStale ? Color.orange : Color.green) : Color.red)
-                    .frame(width: 6, height: 6)
-                Text(model.refreshText)
-                    .lineLimit(1)
-                    .help(model.lastError ?? "")
-                Spacer()
-            }
-            .font(.system(size: 10.5, weight: .medium))
-            .foregroundStyle(.secondary)
-
-            HStack {
-                Button("打开详情") {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(model.lastError == nil ? (model.dataIsStale ? Color.orange : Color.green) : Color.red)
+                .frame(width: 6, height: 6)
+            Text(model.refreshText)
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(model.lastError ?? "")
+            Spacer(minLength: 6)
+            Button {
                     model.dashboardTab = .overview
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "dashboard")
+                } label: {
+                    Label("详情", systemImage: "arrow.up.right.square")
                 }
                 .buttonStyle(.borderedProminent)
-                Spacer()
-                Button("设置") {
+            Button {
                     model.dashboardTab = .settings
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "dashboard")
+                } label: {
+                    Image(systemName: "gearshape")
                 }
-                Button("退出") { NSApp.terminate(nil) }
+                .help("设置")
+            Button(action: { NSApp.terminate(nil) }) {
+                Image(systemName: "power")
             }
-            .controlSize(.small)
+            .help("退出")
         }
+        .controlSize(.small)
     }
 }
 
@@ -357,27 +413,28 @@ struct MetricTile: View {
     let subtitle: String
 
     var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.blue)
-                .frame(width: 28, height: 28)
-                .background(.blue.opacity(0.11), in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.blue)
+                    .frame(width: 24, height: 24)
+                    .background(.blue.opacity(0.12), in: Circle())
                 Text(title)
-                    .font(.system(size: 9.5, weight: .medium))
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                Text(subtitle)
-                    .font(.system(size: 8.5))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            Text(value)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            Text(subtitle)
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+        .padding(9)
         .quotaCard(cornerRadius: 13)
     }
 }
@@ -385,6 +442,7 @@ struct MetricTile: View {
 struct MiniUsageChart: View {
     let points: [DayPoint]
     let coverageText: String
+    let insight: String
 
     private var available: [DayPoint] { points.filter { $0.tokens != nil } }
 
@@ -410,14 +468,35 @@ struct MiniUsageChart: View {
                     .frame(height: 92)
             } else {
                 Chart(available) { point in
-                    BarMark(
+                    AreaMark(
                         x: .value("日期", point.date, unit: .day),
                         y: .value("Token", point.tokens ?? 0)
                     )
                     .foregroundStyle(
-                        LinearGradient(colors: [.blue, .cyan], startPoint: .bottom, endPoint: .top)
+                        LinearGradient(
+                            colors: [.blue.opacity(0.30), .cyan.opacity(0.03)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                    .cornerRadius(4)
+                    .interpolationMethod(.catmullRom)
+
+                    LineMark(
+                        x: .value("日期", point.date, unit: .day),
+                        y: .value("Token", point.tokens ?? 0)
+                    )
+                    .foregroundStyle(.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2.3, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.catmullRom)
+
+                    if point.id == available.last?.id {
+                        PointMark(
+                            x: .value("日期", point.date, unit: .day),
+                            y: .value("Token", point.tokens ?? 0)
+                        )
+                        .foregroundStyle(.blue)
+                        .symbolSize(34)
+                    }
                 }
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .day)) { value in
@@ -427,11 +506,23 @@ struct MiniUsageChart: View {
                     }
                 }
                 .chartYAxis(.hidden)
-                .frame(height: 94)
+                .frame(height: 72)
                 .accessibilityLabel("近 7 日 token 用量图")
             }
+
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.blue)
+                Text(insight)
+                    .lineLimit(1)
+                    .help(insight)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 9.5, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.top, 1)
         }
-        .padding(12)
+        .padding(11)
         .quotaCard()
     }
 }
@@ -479,23 +570,7 @@ struct DashboardView: View {
             }
         }
         .frame(minWidth: 820, minHeight: 590)
-        .background {
-            ZStack {
-                Rectangle().fill(.ultraThinMaterial)
-                RadialGradient(
-                    colors: [.blue.opacity(0.11), .clear],
-                    center: .topLeading,
-                    startRadius: 10,
-                    endRadius: 640
-                )
-                RadialGradient(
-                    colors: [.cyan.opacity(0.07), .clear],
-                    center: .bottomTrailing,
-                    startRadius: 20,
-                    endRadius: 580
-                )
-            }
-        }
+        .background { GlassBackdrop(material: .underWindowBackground) }
     }
 }
 

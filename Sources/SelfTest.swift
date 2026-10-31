@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 enum SelfTest {
@@ -93,6 +94,9 @@ enum SelfTest {
         precondition(forecast!.samples == 4)
         precondition(ForecastCalculator.calculate(samples: Array(samples.prefix(3)), bucket: bucket, now: now) == nil)
         precondition(DisplayFormat.tokens(114_869_535) == "114.9M")
+        let statusImage = StatusItemArtwork.image(style: .standard, remaining: 39, resetDate: nil)
+        precondition(statusImage.size == NSSize(width: 36, height: 22))
+        precondition(statusImage.isTemplate)
         print("self-test passed")
     }
 }

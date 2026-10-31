@@ -117,7 +117,7 @@ actor CodexAppServerClient {
         do {
             let _: InitializeResult = try await request(
                 "initialize",
-                params: ["clientInfo": ["name": "gpt-quota-menu", "version": "2.1.0"]]
+                params: ["clientInfo": ["name": "gpt-quota-menu", "version": "2.2.0"]]
             )
             try sendNotification("initialized")
             ready = true
