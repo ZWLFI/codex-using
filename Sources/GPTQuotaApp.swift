@@ -49,7 +49,7 @@ struct GPTQuotaApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarContentView(model: model, settings: settings)
+            MenuBarContentView(model: model)
         } label: {
             StatusLabel(model: model, settings: settings)
         }

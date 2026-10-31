@@ -178,7 +178,6 @@ struct StatusLabel: View {
 
 struct MenuBarContentView: View {
     @ObservedObject var model: AppModel
-    @ObservedObject var settings: AppSettings
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -186,8 +185,10 @@ struct MenuBarContentView: View {
             GlassBackdrop(material: .popover)
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 10) {
-                    header
+                VStack(spacing: 8) {
+                    if model.buckets.count > 1 {
+                        bucketPicker
+                    }
                     quotaHero
                     metrics
                     MiniUsageChart(
@@ -197,123 +198,76 @@ struct MenuBarContentView: View {
                     )
                     footer
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
             }
         }
-        .frame(width: 400, height: 480)
+        .frame(width: 370, height: 400)
     }
 
-    private var header: some View {
-        VStack(spacing: 9) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [.blue, .cyan],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: "gauge.with.dots.needle.67percent")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 34, height: 34)
-                .shadow(color: .blue.opacity(0.28), radius: 8, y: 4)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("GPT 用量")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text("\(model.selectedBucket?.displayName ?? "Codex") · \(model.selectedBucket?.planName ?? "ChatGPT")")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Label(model.risk.title, systemImage: model.risk.symbol)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(model.risk.color)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(.thinMaterial, in: Capsule())
-                    .overlay { Capsule().stroke(model.risk.color.opacity(0.28), lineWidth: 0.7) }
-                Button(action: model.refresh) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                        .background(.thinMaterial, in: Circle())
-                        .overlay { Circle().stroke(.white.opacity(0.40), lineWidth: 0.7) }
-                        .rotationEffect(model.isRefreshing ? .degrees(360) : .zero)
-                        .animation(model.isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: model.isRefreshing)
-                }
-                .buttonStyle(.plain)
-                .disabled(model.isRefreshing)
-                .help("立即更新")
-            }
-            if model.buckets.count > 1 {
-                Picker("", selection: Binding(
-                    get: { model.selectedBucket?.id ?? "" },
-                    set: model.selectBucket
-                )) {
-                    ForEach(model.buckets) { bucket in
-                        Text(bucket.displayName).tag(bucket.id)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
+    private var bucketPicker: some View {
+        Picker("", selection: Binding(
+            get: { model.selectedBucket?.id ?? "" },
+            set: model.selectBucket
+        )) {
+            ForEach(model.buckets) { bucket in
+                Text(bucket.displayName).tag(bucket.id)
             }
         }
+        .labelsHidden()
+        .pickerStyle(.segmented)
     }
 
     private var quotaHero: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .stroke(.primary.opacity(0.09), lineWidth: 8)
-                Circle()
-                    .trim(from: 0, to: CGFloat((model.remainingPercent ?? 0) / 100))
-                    .stroke(
-                        AngularGradient(colors: [.blue, .cyan, .blue], center: .center),
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .shadow(color: .blue.opacity(0.30), radius: 6)
-                Circle()
-                    .fill(.thinMaterial)
-                    .padding(12)
-                    .overlay {
-                        Circle()
-                            .stroke(.white.opacity(0.34), lineWidth: 0.7)
-                            .padding(12)
-                    }
-                VStack(spacing: -2) {
-                    HStack(alignment: .lastTextBaseline, spacing: 2) {
-                        Text(model.remainingPercent.map { String(Int($0.rounded())) } ?? "—")
-                            .font(.system(size: 25, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                        if model.remainingPercent != nil {
-                            Text("%")
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.secondary)
+        HStack(spacing: 14) {
+            Button(action: model.refresh) {
+                ZStack {
+                    Circle()
+                        .stroke(.primary.opacity(0.09), lineWidth: 8)
+                    Circle()
+                        .trim(from: 0, to: CGFloat((model.remainingPercent ?? 0) / 100))
+                        .stroke(
+                            AngularGradient(colors: [.blue, .cyan, .blue], center: .center),
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .shadow(color: .blue.opacity(0.30), radius: 6)
+                    Circle()
+                        .fill(.thinMaterial)
+                        .padding(12)
+                        .overlay {
+                            Circle()
+                                .stroke(.white.opacity(0.34), lineWidth: 0.7)
+                                .padding(12)
                         }
+                    VStack(spacing: -2) {
+                        HStack(alignment: .lastTextBaseline, spacing: 2) {
+                            Text(model.remainingPercent.map { String(Int($0.rounded())) } ?? "—")
+                                .font(.system(size: 25, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                            if model.remainingPercent != nil {
+                                Text("%")
+                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text("剩余")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
                     }
-                    Text("剩余")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 98, height: 98)
-            .accessibilityLabel("剩余配额 \(DisplayFormat.percent(model.remainingPercent))")
+            .buttonStyle(.plain)
+            .disabled(model.isRefreshing)
+            .frame(width: 90, height: 90)
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("本周期剩余")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.secondary)
                     Text("\(DisplayFormat.countdown(to: model.selectedWindow?.resetDate)) 后重置")
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
                 HStack(spacing: 6) {
@@ -340,8 +294,8 @@ struct MenuBarContentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(15)
-        .quotaCard(cornerRadius: 22)
+        .padding(13)
+        .quotaCard(cornerRadius: 20)
     }
 
     private var metrics: some View {
