@@ -9,6 +9,7 @@ enum AppFiles {
     }()
     static let state = directory.appendingPathComponent("state.json")
     static let samples = directory.appendingPathComponent("samples.json")
+    static let dailyPercent = directory.appendingPathComponent("daily-percent.json")
     static let legacy = directory.appendingPathComponent("legacy-v1.3.json")
 
     static func prepare() throws {
@@ -54,6 +55,34 @@ enum LocalStore {
             try? data.write(to: AppFiles.legacy, options: .atomic)
         }
         defaults.set(2, forKey: "dataMigrationVersion")
+    }
+}
+
+private struct LegacyDailyPercentState: Decodable {
+    let dailyUsage: [String: Double]
+    let lastUsedPercent: Double?
+    let quotaReset: TimeInterval?
+    let migratedAt: Date
+}
+
+enum DailyPercentStorage {
+    static func load() -> DailyPercentState {
+        if let current = LocalStore.load(DailyPercentState.self, from: AppFiles.dailyPercent) {
+            return current
+        }
+        guard let legacy = LocalStore.load(LegacyDailyPercentState.self, from: AppFiles.legacy) else {
+            return DailyPercentState()
+        }
+
+        var state = DailyPercentState(valuesByBucket: ["codex": legacy.dailyUsage])
+        if let usedPercent = legacy.lastUsedPercent, let resetsAt = legacy.quotaReset {
+            state.baselines["codex"] = DailyPercentBaseline(
+                usedPercent: usedPercent,
+                resetsAt: resetsAt,
+                sampledAt: legacy.migratedAt
+            )
+        }
+        return state
     }
 }
 

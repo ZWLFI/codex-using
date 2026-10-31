@@ -97,6 +97,51 @@ enum SelfTest {
         let statusImage = StatusItemArtwork.image(style: .standard, remaining: 39, resetDate: nil)
         precondition(statusImage.size == NSSize(width: 36, height: 22))
         precondition(statusImage.isTemplate)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        var dailyState = DailyPercentState(
+            baselines: [
+                "codex": DailyPercentBaseline(
+                    usedPercent: 40,
+                    resetsAt: 100,
+                    sampledAt: ISO8601DateFormatter().date(from: "2026-10-31T23:58:00Z")!
+                )
+            ]
+        )
+        DailyPercentTracker.update(
+            &dailyState,
+            bucketID: "codex",
+            usedPercent: 42,
+            resetsAt: 100,
+            sampledAt: ISO8601DateFormatter().date(from: "2026-11-01T00:03:00Z")!,
+            calendar: calendar
+        )
+        DailyPercentTracker.update(
+            &dailyState,
+            bucketID: "codex",
+            usedPercent: 50,
+            resetsAt: 100,
+            sampledAt: ISO8601DateFormatter().date(from: "2026-11-01T00:08:00Z")!,
+            calendar: calendar
+        )
+        DailyPercentTracker.update(
+            &dailyState,
+            bucketID: "codex",
+            usedPercent: 5,
+            resetsAt: 200,
+            sampledAt: ISO8601DateFormatter().date(from: "2026-11-01T00:13:00Z")!,
+            calendar: calendar
+        )
+        let dailyPoints = DailyPercentTracker.points(
+            dailyState,
+            bucketID: "codex",
+            days: 7,
+            endingAt: ISO8601DateFormatter().date(from: "2026-11-01T12:00:00Z")!,
+            calendar: calendar
+        )
+        precondition(dailyPoints.count == 7)
+        precondition(dailyPoints.last?.value == 15)
         print("self-test passed")
     }
 }

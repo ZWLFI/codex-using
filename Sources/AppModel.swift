@@ -16,6 +16,7 @@ final class AppModel: ObservableObject {
     private let client = CodexAppServerClient()
     private let notifications = NotificationService()
     private var samples: [UsageSample]
+    private var dailyPercentState: DailyPercentState
     private var timer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var started = false
@@ -25,6 +26,7 @@ final class AppModel: ObservableObject {
         LocalStore.migrateLegacyDefaultsIfNeeded()
         snapshot = LocalStore.load(DashboardSnapshot.self, from: AppFiles.state)
         samples = LocalStore.load([UsageSample].self, from: AppFiles.samples) ?? []
+        dailyPercentState = DailyPercentStorage.load()
         selectedBucketID = snapshot?.rateLimits.buckets.first?.id ?? ""
         recomputeDerived()
     }
@@ -40,12 +42,11 @@ final class AppModel: ObservableObject {
     }
     var selectedWindow: RateLimitWindow? { selectedBucket?.activeWindow }
     var remainingPercent: Double? { selectedWindow?.remainingPercent }
-    var usedPercent: Double? { selectedWindow?.usedPercent }
     var latestDaily: DailyUsageBucket? { UsageStatistics.latest(snapshot?.usage.dailyUsageBuckets ?? []) }
-    var average7: Int64? { UsageStatistics.average(snapshot?.usage.dailyUsageBuckets ?? [], days: 7) }
-    var dayPoints7: [DayPoint] { UsageStatistics.dayPoints(buckets: snapshot?.usage.dailyUsageBuckets ?? [], days: 7) }
+    var dailyPercentPoints7: [DailyPercentPoint] {
+        DailyPercentTracker.points(dailyPercentState, bucketID: selectedBucket?.id ?? "codex")
+    }
     var insight: String { UsageStatistics.insight(snapshot?.usage.dailyUsageBuckets ?? []) }
-    var resetCredits: Int { snapshot?.rateLimits.rateLimitResetCredits?.availableCount ?? 0 }
     var summary: UsageSummary? { snapshot?.usage.summary }
     var dataIsStale: Bool {
         guard let fetchedAt = snapshot?.fetchedAt else { return true }
@@ -166,9 +167,21 @@ final class AppModel: ObservableObject {
             selectedBucketID = newSnapshot.rateLimits.buckets.first?.id ?? ""
         }
         appendSamples(from: newSnapshot)
+        for bucket in newSnapshot.rateLimits.buckets {
+            guard let usedPercent = bucket.activeWindow?.usedPercent,
+                  let resetsAt = bucket.activeWindow?.resetsAt else { continue }
+            DailyPercentTracker.update(
+                &dailyPercentState,
+                bucketID: bucket.id,
+                usedPercent: usedPercent,
+                resetsAt: resetsAt,
+                sampledAt: newSnapshot.fetchedAt
+            )
+        }
         recomputeDerived()
         try? LocalStore.save(newSnapshot, to: AppFiles.state)
         try? LocalStore.save(samples, to: AppFiles.samples)
+        try? LocalStore.save(dailyPercentState, to: AppFiles.dailyPercent)
         let bucket = selectedBucket
         let preferences = settings.notificationPreferences
         let forecast = forecast

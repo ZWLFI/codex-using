@@ -190,19 +190,14 @@ struct MenuBarContentView: View {
                         bucketPicker
                     }
                     quotaHero
-                    metrics
-                    MiniUsageChart(
-                        points: model.dayPoints7,
-                        coverageText: model.coverageText,
-                        insight: model.insight
-                    )
+                    WeeklyPercentChart(points: model.dailyPercentPoints7)
                     footer
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
             }
         }
-        .frame(width: 370, height: 400)
+        .frame(width: 370, height: 350)
     }
 
     private var bucketPicker: some View {
@@ -270,58 +265,11 @@ struct MenuBarContentView: View {
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
-                HStack(spacing: 6) {
-                    Image(systemName: model.forecast?.exhaustsBeforeReset == true ? "exclamationmark.triangle.fill" : "waveform.path.ecg")
-                    Text(model.forecastText)
-                        .lineLimit(2)
-                }
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(model.forecast?.exhaustsBeforeReset == true ? Color.red : Color.secondary)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(.regularMaterial, in: Capsule())
-                .overlay { Capsule().stroke(.white.opacity(0.28), lineWidth: 0.6) }
-
-                HStack(spacing: 6) {
-                    Text("已使用 \(DisplayFormat.percent(model.usedPercent))")
-                    if model.resetCredits > 0 {
-                        Text("·")
-                        Label("重置券 \(model.resetCredits)", systemImage: "arrow.counterclockwise.circle")
-                    }
-                }
-                .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(13)
         .quotaCard(cornerRadius: 20)
-    }
-
-    private var metrics: some View {
-        LazyVGrid(
-            columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
-            spacing: 8
-        ) {
-            MetricTile(
-                icon: "calendar",
-                title: "最近完整日",
-                value: DisplayFormat.tokens(model.latestDaily?.tokens),
-                subtitle: model.latestDaily?.date.map(DisplayFormat.day.string) ?? "暂无数据"
-            )
-            MetricTile(
-                icon: "chart.bar.fill",
-                title: "7 日均值",
-                value: DisplayFormat.tokens(model.average7),
-                subtitle: "token / 日"
-            )
-            MetricTile(
-                icon: "flame.fill",
-                title: "连续使用",
-                value: model.summary?.currentStreakDays.map { "\($0) 天" } ?? "—",
-                subtitle: "最长 \(model.summary?.longestStreakDays.map(String.init) ?? "—") 天"
-            )
-        }
     }
 
     private var footer: some View {
@@ -360,124 +308,88 @@ struct MenuBarContentView: View {
     }
 }
 
-struct MetricTile: View {
-    let icon: String
-    let title: String
-    let value: String
-    let subtitle: String
+struct WeeklyPercentChart: View {
+    let points: [DailyPercentPoint]
+    private let barAreaHeight: CGFloat = 92
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM/dd"
+        return formatter
+    }()
+
+    private var scaleMaximum: Double {
+        max(10, (points.compactMap(\.value).max() ?? 0) * 1.12)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(.blue)
-                    .frame(width: 24, height: 24)
-                    .background(.blue.opacity(0.12), in: Circle())
-                Text(title)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("最近 7 天")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("每日配额使用")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
             }
-            Text(value)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-            Text(subtitle)
-                .font(.system(size: 8.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
-        .padding(9)
-        .quotaCard(cornerRadius: 13)
-    }
-}
 
-struct MiniUsageChart: View {
-    let points: [DayPoint]
-    let coverageText: String
-    let insight: String
+            HStack(alignment: .bottom, spacing: 6) {
+                ForEach(points) { point in
+                    VStack(spacing: 6) {
+                        ZStack(alignment: .bottom) {
+                            VStack(spacing: 4) {
+                                Text(point.value.map { "\(Int($0.rounded()))%" } ?? "—")
+                                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(point.value == nil ? Color.secondary : Color.primary)
+                                    .monospacedDigit()
 
-    private var available: [DayPoint] { points.filter { $0.tokens != nil } }
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: point.value == nil
+                                                ? [.secondary.opacity(0.16), .secondary.opacity(0.08)]
+                                                : [.blue, .cyan.opacity(0.78)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(
+                                                LinearGradient(
+                                                    colors: [.white.opacity(0.55), .white.opacity(0.06)],
+                                                    startPoint: .top,
+                                                    endPoint: .bottom
+                                                ),
+                                                lineWidth: 0.7
+                                            )
+                                    }
+                                    .shadow(color: .blue.opacity(point.value == nil ? 0 : 0.20), radius: 4, y: 3)
+                                    .frame(height: barHeight(for: point.value))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .frame(height: barAreaHeight, alignment: .bottom)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text("近 7 日 token")
-                    .font(.system(size: 11, weight: .semibold))
-                Spacer()
-                Text(coverageText)
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(.tertiary)
-            }
-            if available.isEmpty {
-                VStack(spacing: 7) {
-                    Image(systemName: "chart.bar.xaxis")
-                        .font(.system(size: 24))
-                    Text("暂无每日数据")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                    .frame(height: 92)
-            } else {
-                Chart(available) { point in
-                    AreaMark(
-                        x: .value("日期", point.date, unit: .day),
-                        y: .value("Token", point.tokens ?? 0)
-                    )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.blue.opacity(0.30), .cyan.opacity(0.03)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .interpolationMethod(.catmullRom)
-
-                    LineMark(
-                        x: .value("日期", point.date, unit: .day),
-                        y: .value("Token", point.tokens ?? 0)
-                    )
-                    .foregroundStyle(.blue)
-                    .lineStyle(StrokeStyle(lineWidth: 2.3, lineCap: .round, lineJoin: .round))
-                    .interpolationMethod(.catmullRom)
-
-                    if point.id == available.last?.id {
-                        PointMark(
-                            x: .value("日期", point.date, unit: .day),
-                            y: .value("Token", point.tokens ?? 0)
-                        )
-                        .foregroundStyle(.blue)
-                        .symbolSize(34)
+                        Text(Self.dayFormatter.string(from: point.date))
+                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .day)) { value in
-                        AxisValueLabel(format: .dateTime.weekday(.narrow))
-                        AxisGridLine().foregroundStyle(.clear)
-                        AxisTick().foregroundStyle(.clear)
-                    }
-                }
-                .chartYAxis(.hidden)
-                .frame(height: 72)
-                .accessibilityLabel("近 7 日 token 用量图")
             }
-
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(.blue)
-                Text(insight)
-                    .lineLimit(1)
-                    .help(insight)
-                Spacer(minLength: 0)
-            }
-            .font(.system(size: 9.5, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.top, 1)
         }
-        .padding(11)
+        .padding(12)
         .quotaCard()
+    }
+
+    private func barHeight(for value: Double?) -> CGFloat {
+        guard let value else { return 2 }
+        return max(2, (barAreaHeight - 18) * CGFloat(value / scaleMaximum))
     }
 }
 

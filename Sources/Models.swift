@@ -113,6 +113,86 @@ struct UsageSample: Codable, Hashable {
     let resetsAt: TimeInterval
 }
 
+struct DailyPercentBaseline: Codable, Hashable {
+    var usedPercent: Double
+    var resetsAt: TimeInterval
+    var sampledAt: Date
+}
+
+struct DailyPercentState: Codable, Hashable {
+    var valuesByBucket: [String: [String: Double]] = [:]
+    var baselines: [String: DailyPercentBaseline] = [:]
+}
+
+struct DailyPercentPoint: Identifiable, Hashable {
+    let key: String
+    let date: Date
+    let value: Double?
+
+    var id: String { key }
+}
+
+enum DailyPercentTracker {
+    static func update(
+        _ state: inout DailyPercentState,
+        bucketID: String,
+        usedPercent: Double,
+        resetsAt: TimeInterval,
+        sampledAt: Date,
+        calendar: Calendar = .current
+    ) {
+        let current = max(0, min(100, usedPercent))
+        let day = DayKey.key(for: sampledAt, calendar: calendar)
+        defer {
+            state.baselines[bucketID] = DailyPercentBaseline(
+                usedPercent: current,
+                resetsAt: resetsAt,
+                sampledAt: sampledAt
+            )
+        }
+
+        guard let previous = state.baselines[bucketID] else { return }
+        let previousDay = DayKey.key(for: previous.sampledAt, calendar: calendar)
+        if previousDay != day, sampledAt.timeIntervalSince(previous.sampledAt) > 15 * 60 {
+            return
+        }
+
+        let delta: Double
+        if current >= previous.usedPercent {
+            delta = current - previous.usedPercent
+        } else if abs(resetsAt - previous.resetsAt) > 60 {
+            delta = current
+        } else {
+            delta = 0
+        }
+        guard delta > 0 else { return }
+
+        var values = state.valuesByBucket[bucketID] ?? [:]
+        values[day, default: 0] += delta
+        let cutoff = calendar.date(byAdding: .day, value: -90, to: sampledAt) ?? sampledAt
+        values = values.filter { entry in
+            guard let date = DayKey.date(from: entry.key, calendar: calendar) else { return false }
+            return date >= cutoff
+        }
+        state.valuesByBucket[bucketID] = values
+    }
+
+    static func points(
+        _ state: DailyPercentState,
+        bucketID: String,
+        days: Int = 7,
+        endingAt end: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [DailyPercentPoint] {
+        let values = state.valuesByBucket[bucketID] ?? [:]
+        return (0..<days).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset - days + 1, to: end) else { return nil }
+            let key = DayKey.key(for: date, calendar: calendar)
+            return DailyPercentPoint(key: key, date: date, value: values[key])
+        }
+    }
+}
+
 enum RiskLevel: String, Codable {
     case healthy
     case watch
