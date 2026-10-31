@@ -25,11 +25,29 @@ extension RiskLevel {
 extension View {
     func quotaCard(cornerRadius: CGFloat = 16) -> some View {
         self
-            .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.20), .white.opacity(0.035), .blue.opacity(0.035)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(.primary.opacity(0.07), lineWidth: 0.5)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.52), .white.opacity(0.10), .primary.opacity(0.08)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.7
+                    )
             }
+            .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 7)
     }
 }
 
@@ -39,14 +57,28 @@ struct StatusLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(model.risk.color)
-                .frame(width: 6, height: 6)
-            Text(model.menuTitle)
-                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+        Group {
+            switch settings.menuStyle {
+            case .compact:
+                Text(DisplayFormat.percent(model.remainingPercent))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+            case .standard, .full:
+                VStack(alignment: .leading, spacing: -3) {
+                    HStack(spacing: 3) {
+                        Text(settings.menuStyle == .full ? "GPT · \(shortReset)" : "GPT")
+                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                        Circle()
+                            .fill(model.risk.color)
+                            .frame(width: 4, height: 4)
+                    }
+                    Text(DisplayFormat.percent(model.remainingPercent))
+                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                }
+                .frame(minWidth: settings.menuStyle == .full ? 54 : 35, alignment: .leading)
+            }
         }
+        .frame(height: 22)
         .onAppear {
             model.start()
             if CommandLine.arguments.contains("--show-dashboard") {
@@ -54,7 +86,13 @@ struct StatusLabel: View {
                 openWindow(id: "dashboard")
             }
         }
-        .accessibilityLabel("GPT 用量，\(model.menuTitle)，\(model.risk.title)")
+        .accessibilityLabel("GPT 用量，剩余 \(DisplayFormat.percent(model.remainingPercent))，\(model.risk.title)")
+    }
+
+    private var shortReset: String {
+        guard let date = model.selectedWindow?.resetDate else { return "—" }
+        let hours = max(0, Int(date.timeIntervalSinceNow / 3_600))
+        return hours >= 24 ? "\(hours / 24)d" : "\(hours)h"
     }
 }
 
@@ -64,41 +102,90 @@ struct MenuBarContentView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                header
-                quotaHero
-                metrics
-                MiniUsageChart(points: model.dayPoints7, coverageText: model.coverageText)
-                insight
-                footer
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+            Circle()
+                .fill(.blue.opacity(0.22))
+                .frame(width: 260, height: 260)
+                .blur(radius: 72)
+                .offset(x: -170, y: -250)
+            Circle()
+                .fill(.cyan.opacity(0.16))
+                .frame(width: 220, height: 220)
+                .blur(radius: 76)
+                .offset(x: 170, y: 80)
+            Circle()
+                .fill(.purple.opacity(0.10))
+                .frame(width: 190, height: 190)
+                .blur(radius: 72)
+                .offset(x: -120, y: 280)
+            LinearGradient(
+                colors: [.white.opacity(0.12), .clear, .black.opacity(0.025)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            ScrollView {
+                VStack(spacing: 12) {
+                    header
+                    quotaHero
+                    metrics
+                    MiniUsageChart(points: model.dayPoints7, coverageText: model.coverageText)
+                    insight
+                    footer
+                }
+                .padding(15)
             }
-            .padding(14)
         }
-        .frame(width: 420, height: 570)
-        .background {
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                RadialGradient(
-                    colors: [.blue.opacity(0.12), .clear],
-                    center: .topLeading,
-                    startRadius: 8,
-                    endRadius: 420
-                )
-            }
-        }
+        .frame(width: 430, height: 610)
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(model.selectedBucket?.displayName ?? "Codex") · \(model.selectedBucket?.planName ?? "ChatGPT")")
-                    .font(.system(size: 15, weight: .semibold))
+        VStack(spacing: 9) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue, .cyan.opacity(0.82)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    Image(systemName: "gauge.with.dots.needle.67percent")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 38, height: 38)
+                .shadow(color: .blue.opacity(0.28), radius: 9, y: 4)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("GPT 用量")
+                        .font(.system(size: 15.5, weight: .semibold))
+                    Text("\(model.selectedBucket?.displayName ?? "Codex") · \(model.selectedBucket?.planName ?? "ChatGPT")")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
                 Label(model.risk.title, systemImage: model.risk.symbol)
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(model.risk.color)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay { Capsule().stroke(model.risk.color.opacity(0.20), lineWidth: 0.6) }
+                Button(action: model.refresh) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .rotationEffect(model.isRefreshing ? .degrees(360) : .zero)
+                        .animation(model.isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: model.isRefreshing)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isRefreshing)
+                .help("立即更新")
             }
-            Spacer()
             if model.buckets.count > 1 {
                 Picker("", selection: Binding(
                     get: { model.selectedBucket?.id ?? "" },
@@ -109,65 +196,78 @@ struct MenuBarContentView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: 130)
+                .pickerStyle(.segmented)
             }
-            Button(action: model.refresh) {
-                Image(systemName: "arrow.clockwise")
-                    .rotationEffect(model.isRefreshing ? .degrees(360) : .zero)
-                    .animation(model.isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: model.isRefreshing)
-            }
-            .buttonStyle(.plain)
-            .disabled(model.isRefreshing)
-            .help("立即更新")
         }
     }
 
     private var quotaHero: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("剩余配额")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+        HStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .stroke(.primary.opacity(0.075), lineWidth: 9)
+                Circle()
+                    .trim(from: 0, to: CGFloat((model.remainingPercent ?? 0) / 100))
+                    .stroke(
+                        AngularGradient(colors: [.blue, .cyan, .mint, .blue], center: .center),
+                        style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .shadow(color: .cyan.opacity(0.28), radius: 7)
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .padding(13)
+                VStack(spacing: -2) {
                     HStack(alignment: .lastTextBaseline, spacing: 2) {
                         Text(model.remainingPercent.map { String(Int($0.rounded())) } ?? "—")
-                            .font(.system(size: 42, weight: .semibold, design: .rounded))
+                            .font(.system(size: 27, weight: .bold, design: .rounded))
                             .monospacedDigit()
                         if model.remainingPercent != nil {
                             Text("%")
-                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    Text("剩余")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(model.forecastText)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(model.forecast?.exhaustsBeforeReset == true ? Color.red : Color.secondary)
-                        .multilineTextAlignment(.trailing)
+            }
+            .frame(width: 108, height: 108)
+            .accessibilityLabel("剩余配额 \(DisplayFormat.percent(model.remainingPercent))")
+
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("当前配额窗口")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
                     Text("\(DisplayFormat.countdown(to: model.selectedWindow?.resetDate)) 后重置")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
                 }
-                .frame(maxWidth: 210, alignment: .trailing)
-            }
-
-            ProgressView(value: model.usedPercent ?? 0, total: 100)
-                .tint(model.risk.color)
-                .scaleEffect(x: 1, y: 1.6)
-
-            HStack {
-                Text("已使用 \(DisplayFormat.percent(model.usedPercent))")
-                Spacer()
-                if let reset = model.selectedWindow?.resetDate {
-                    Text(DisplayFormat.dateTime.string(from: reset))
+                HStack(spacing: 6) {
+                    Image(systemName: model.forecast?.exhaustsBeforeReset == true ? "exclamationmark.triangle.fill" : "waveform.path.ecg")
+                    Text(model.forecastText)
+                        .lineLimit(2)
                 }
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(model.forecast?.exhaustsBeforeReset == true ? Color.red : Color.secondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(.primary.opacity(0.045), in: Capsule())
+
+                HStack(spacing: 5) {
+                    Text("已使用 \(DisplayFormat.percent(model.usedPercent))")
+                    Text("·")
+                    Text((model.selectedWindow?.resetDate).map { DisplayFormat.dateTime.string(from: $0) } ?? "等待更新")
+                }
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(.tertiary)
             }
-            .font(.system(size: 10.5, weight: .medium))
-            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(16)
-        .quotaCard(cornerRadius: 19)
+        .padding(17)
+        .quotaCard(cornerRadius: 23)
     }
 
     private var metrics: some View {
@@ -379,7 +479,23 @@ struct DashboardView: View {
             }
         }
         .frame(minWidth: 820, minHeight: 590)
-        .background(.regularMaterial)
+        .background {
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                RadialGradient(
+                    colors: [.blue.opacity(0.11), .clear],
+                    center: .topLeading,
+                    startRadius: 10,
+                    endRadius: 640
+                )
+                RadialGradient(
+                    colors: [.cyan.opacity(0.07), .clear],
+                    center: .bottomTrailing,
+                    startRadius: 20,
+                    endRadius: 580
+                )
+            }
+        }
     }
 }
 
