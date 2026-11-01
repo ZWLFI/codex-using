@@ -30,7 +30,7 @@
 
 需要 **Apple Silicon Mac、macOS 13 或更新版本**，以及本机已登录的 Codex。当前发布包仅包含 `arm64` 架构。
 
-1. 从 [Releases](https://github.com/ZWLFI/codex-using/releases/latest) 下载 `codex-using-v2.9.0-macos-arm64.zip`。
+1. 从 [Releases](https://github.com/ZWLFI/codex-using/releases/latest) 下载 `codex-using-v2.9.1-macos-arm64.zip`。
 2. 解压，将「GPT 用量.app」拖入「应用程序」文件夹。
 3. 打开应用，点击菜单栏中的 GPT 读数。
 

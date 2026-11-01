@@ -17,16 +17,21 @@ struct QuotaGauge: View {
             let readout = reading.map { String(Int($0.rounded())) }
             // A seven-segment 1 has an empty left edge; center the visible digits.
             let leadingInset = readout?.hasPrefix("1") == true ? digitHeight * 0.59 * 0.83 : 0
+            let hubRadius = min(11, geometry.size.height * 0.052)
+            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height - hubRadius - 7)
+            let radius = min(geometry.size.width * 0.43, geometry.size.height * 0.74) - 7
+            let start = -146.0
+            let sweep = 112.0
             ZStack {
                 LinearGradient(
-                    colors: [Color(white: 0.075), Color(white: 0.045)],
+                    colors: [Color(red: 0.105, green: 0.099, blue: 0.085), Color(red: 0.047, green: 0.044, blue: 0.037)],
                     startPoint: .top, endPoint: .bottom
                 )
                 RadialGradient(
-                    stops: [.init(color: tint.opacity(isCurrent ? 0.15 : 0.025), location: 0),
-                            .init(color: tint.opacity(isCurrent ? 0.06 : 0.01), location: 0.65),
+                    stops: [.init(color: tint.opacity(isCurrent ? 0.075 : 0.015), location: 0),
+                            .init(color: tint.opacity(isCurrent ? 0.025 : 0.005), location: 0.65),
                             .init(color: .clear, location: 1)],
-                    center: .init(x: 0.5, y: 0.35), startRadius: 8, endRadius: geometry.size.width * 0.65
+                    center: .init(x: 0.5, y: 0.72), startRadius: 8, endRadius: geometry.size.width * 0.55
                 )
                 LinearGradient(
                     stops: [.init(color: .white.opacity(0.045), location: 0),
@@ -55,13 +60,7 @@ struct QuotaGauge: View {
                 .position(x: geometry.size.width / 2 - leadingInset / 2, y: geometry.size.height * 0.60)
                 .accessibilityHidden(true)
 
-                Canvas { context, size in
-                    // The centered readout sits beneath the physical needle, without an opaque mask.
-                    let center = CGPoint(x: size.width / 2, y: size.height * 0.95)
-                    let radius = min(size.width * 0.43, size.height * 0.74)
-                    let start = -146.0
-                    let sweep = 112.0
-
+                Canvas { context, _ in
                     func position(_ angle: Double, _ distance: CGFloat) -> CGPoint {
                         let radians: Double = angle * Double.pi / 180
                         return CGPoint(x: center.x + CGFloat(cos(radians)) * distance, y: center.y + CGFloat(sin(radians)) * distance)
@@ -73,22 +72,20 @@ struct QuotaGauge: View {
                     }
 
                     context.stroke(arc(to: start + sweep, radius: radius - 2), with: .color(.black.opacity(0.85)), lineWidth: 6)
-                    context.stroke(arc(to: start + sweep, radius: radius), with: .color(tint.opacity(0.35)), lineWidth: 0.7)
-                    context.stroke(arc(to: start + sweep, radius: radius - 2), with: .color(tint.opacity(0.28)), lineWidth: 2)
-                    context.stroke(arc(to: start + sweep, radius: radius - 5), with: .color(tint.opacity(0.14)), lineWidth: 0.7)
+                    context.stroke(arc(to: start + sweep, radius: radius), with: .color(UITheme.secondaryText.opacity(0.5)), lineWidth: 0.7)
+                    context.stroke(arc(to: start + sweep, radius: radius - 2), with: .color(UITheme.secondaryText.opacity(0.18)), lineWidth: 2)
+                    context.stroke(arc(to: start + sweep, radius: radius - 5), with: .color(.white.opacity(0.06)), lineWidth: 0.7)
 
                     if let reading, reading > 0 {
                         var glow = context
-                        glow.addFilter(.shadow(color: tint.opacity(0.40), radius: 4))
+                        glow.addFilter(.shadow(color: tint.opacity(0.16), radius: 3))
                         glow.stroke(
                             arc(to: start + sweep * reading / 100, radius: radius - 2),
-                            with: .color(tint.opacity(isCurrent ? 0.9 : 0.5)),
-                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                            with: .color(tint.opacity(isCurrent ? 0.78 : 0.5)),
+                            style: StrokeStyle(lineWidth: 1.8, lineCap: .round)
                         )
                     }
 
-                    var backlight = context
-                    backlight.addFilter(.shadow(color: tint.opacity(isCurrent ? 0.25 : 0), radius: 1.3))
                     for tick in 0...40 {
                         let angle = start + sweep * Double(tick) / 40
                         let major = tick.isMultiple(of: 10)
@@ -100,44 +97,67 @@ struct QuotaGauge: View {
                         var engraving = context
                         engraving.translateBy(x: 0, y: 1)
                         engraving.stroke(mark, with: .color(.black.opacity(0.85)), lineWidth: major ? 2 : 1.5)
-                        backlight.stroke(mark, with: .color(tint.opacity(major ? 0.95 : 0.6)), lineWidth: major ? 1.2 : 0.8)
+                        context.stroke(mark, with: .color(UITheme.secondaryText.opacity(major ? 1 : 0.72)), lineWidth: major ? 1.2 : 0.8)
 
                         if major {
-                            backlight.draw(
+                            context.draw(
                                 Text("\(tick * 5 / 2)")
                                     .font(.system(size: 10, weight: .medium, design: .rounded))
-                                    .foregroundColor(tint.opacity(0.92)),
+                                    .foregroundColor(UITheme.secondaryText),
                                 at: position(angle, radius + 22)
                             )
                         }
                     }
+                }
+                .accessibilityHidden(true)
 
+                VStack {
+                    HStack {
+                        Text("剩余配额")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(UITheme.secondaryText)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .accessibilityHidden(true)
+
+                // Draw the complete mechanism above all face content, including cached readouts.
+                Canvas { context, _ in
+                    func position(_ angle: Double, _ distance: CGFloat) -> CGPoint {
+                        let radians = angle * Double.pi / 180
+                        return CGPoint(x: center.x + CGFloat(cos(radians)) * distance,
+                                       y: center.y + CGFloat(sin(radians)) * distance)
+                    }
                     if let reading {
                         let angle = start + sweep * reading / 100
                         let radians = angle * .pi / 180
                         let normal = CGVector(dx: -sin(radians), dy: cos(radians))
-                        let tip = position(angle, radius + 10)
+                        let tip = position(angle, radius + 15)
                         let tail = position(angle, -6)
-                        let left = CGPoint(x: tail.x + normal.dx * 3, y: tail.y + normal.dy * 3)
-                        let right = CGPoint(x: tail.x - normal.dx * 3, y: tail.y - normal.dy * 3)
+                        let left = CGPoint(x: tail.x + normal.dx * 2, y: tail.y + normal.dy * 2)
+                        let right = CGPoint(x: tail.x - normal.dx * 2, y: tail.y - normal.dy * 2)
                         var needle = Path()
                         needle.addLines([tip, left, right])
                         needle.closeSubpath()
                         var metal = context
-                        metal.opacity = isCurrent ? 1 : 0.6
                         metal.addFilter(.shadow(color: .black.opacity(0.9), radius: 2, x: 1.5, y: 2.5))
                         metal.fill(needle, with: .linearGradient(
                             Gradient(colors: [Color(white: 0.90), Color(white: 0.64), Color(white: 0.24)]),
                             startPoint: left, endPoint: right
                         ))
-                        context.stroke(needle, with: .color(.white.opacity(isCurrent ? 0.32 : 0.16)), lineWidth: 0.5)
+                        context.stroke(needle, with: .color(.white.opacity(0.38)), lineWidth: 0.5)
                         var bevel = Path()
                         bevel.move(to: left)
                         bevel.addLine(to: tip)
-                        context.stroke(bevel, with: .color(.white.opacity(isCurrent ? 0.8 : 0.35)), lineWidth: 0.6)
+                        context.stroke(bevel, with: .color(.white.opacity(0.85)), lineWidth: 0.6)
+                        var spine = Path()
+                        spine.move(to: position(angle, hubRadius * 0.7))
+                        spine.addLine(to: tip)
+                        context.stroke(spine, with: .color(Color(white: 0.94)), style: StrokeStyle(lineWidth: 0.75, lineCap: .round))
                     }
 
-                    let hubRadius = min(11, size.height * 0.052)
                     let pivot = CGRect(x: center.x - hubRadius, y: center.y - hubRadius, width: hubRadius * 2, height: hubRadius * 2)
                     var hub = context
                     hub.addFilter(.shadow(color: .black.opacity(0.85), radius: 2.5, x: 0, y: 2))
@@ -154,18 +174,8 @@ struct QuotaGauge: View {
                     ))
                     context.stroke(Path(ellipseIn: cap), with: .color(.black.opacity(0.8)), lineWidth: 0.6)
                 }
-                .accessibilityHidden(true)
-
-                VStack {
-                    HStack {
-                        Text("剩余配额")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(UITheme.secondaryText)
-                        Spacer()
-                    }
-                    Spacer()
-                }
-                .padding(14)
+                .zIndex(3)
+                .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
         }
