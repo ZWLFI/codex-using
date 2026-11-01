@@ -177,7 +177,7 @@ struct WeeklyPercentChart: View {
     let points: [DailyPercentPoint]
     var openHistory: (() -> Void)? = nil
     @State private var hoveredKey: String?
-    private let plotHeight: CGFloat = 60
+    private let plotHeight: CGFloat = 48
     private var scaleMaximum: Double { max(10, points.compactMap(\.value).max() ?? 0) }
     private var inspectedPoint: DailyPercentPoint? {
         points.first { $0.key == hoveredKey } ?? points.last
@@ -189,21 +189,21 @@ struct WeeklyPercentChart: View {
                 Text("近 7 天消耗").font(.system(size: 11, weight: .medium))
                     .help("本地观测的配额消耗；— 表示未记录。")
                 Spacer()
-                if let point = inspectedPoint {
-                    Text("\(Calendar.current.isDateInToday(point.date) ? "今天" : DisplayFormat.day.string(from: point.date)) · \(point.value.map { DisplayFormat.observedPercent($0) } ?? "未记录")")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.accentColor).monospacedDigit()
-                }
                 if let openHistory {
                     Button(action: openHistory) { Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)) }
                         .buttonStyle(.borderless).accessibilityLabel("用量历史")
                 }
             }
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 4) {
                 ForEach(points) { point in
                     let today = Calendar.current.isDateInToday(point.date)
                     let selected = point.key == inspectedPoint?.key
                     VStack(spacing: 5) {
+                        Text(DisplayFormat.observedPercent(point.value))
+                            .font(.system(size: 10, weight: selected ? .semibold : .medium))
+                            .foregroundStyle(selected ? Color.accentColor : Color.primary)
+                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                            .frame(height: 12)
                         ZStack(alignment: .bottom) {
                             if let value = point.value {
                                 RoundedRectangle(cornerRadius: 3)

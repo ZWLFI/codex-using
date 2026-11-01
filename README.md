@@ -14,7 +14,7 @@
 ## 功能
 
 - 菜单栏剩余百分比，紧凑弹窗显示重置时间和预计可用时长
-- 多配额切换、七日配额消耗图；悬停查看单日百分比，历史图支持悬停或点击查看精确 token
+- 多配额切换、七日配额消耗图；每天百分比直接显示在柱形上方，历史图支持悬停或点击查看精确 token
 - 每日 token 历史、CSV / JSON 导出；缺失日期保留空白
 - 配额阈值、重置和耗尽预测通知，支持安静时段
 - 本地缓存、登录时启动、手动刷新（⌘R）与诊断信息
@@ -24,7 +24,7 @@
 
 需要 **Apple Silicon Mac、macOS 13 或更新版本**，以及本机已登录的 Codex。当前发布包仅包含 `arm64` 架构。
 
-1. 从 [Releases](https://github.com/ZWLFI/codex-using/releases/latest) 下载 `codex-using-v2.8.0-macos-arm64.zip`。
+1. 从 [Releases](https://github.com/ZWLFI/codex-using/releases/latest) 下载 `codex-using-v2.8.1-macos-arm64.zip`。
 2. 解压，将「GPT 用量.app」拖入「应用程序」文件夹。
 3. 打开应用，点击菜单栏中的 GPT 读数。
 
