@@ -58,7 +58,7 @@ struct GPTQuotaApp: App {
         Window("GPT 用量", id: "dashboard") {
             DashboardView(model: model, settings: settings)
         }
-        .defaultSize(width: 900, height: 650)
+        .defaultSize(width: 760, height: 560)
     }
 }
 

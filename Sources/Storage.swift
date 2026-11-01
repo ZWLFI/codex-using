@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import ServiceManagement
+import UniformTypeIdentifiers
 
 enum AppFiles {
     static let directory: URL = {
@@ -208,20 +209,31 @@ enum ExportService {
     static func export(_ snapshot: DashboardSnapshot, format: ExportFormat, range: Int?) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "GPT-用量-\(DayKey.key(for: Date())).\(format.rawValue)"
+        panel.allowedContentTypes = [format == .csv ? .commaSeparatedText : .json]
         panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        let buckets = filtered(snapshot.usage.dailyUsageBuckets ?? [], range: range)
-        do {
-            switch format {
-            case .csv:
-                try UsageExport.csv(buckets).write(to: url, atomically: true, encoding: .utf8)
-            case .json:
-                try UsageExport.json(buckets).write(to: url, options: .atomic)
+        let window = NSApp.keyWindow
+        let completion: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            let buckets = filtered(snapshot.usage.dailyUsageBuckets ?? [], range: range)
+            do {
+                switch format {
+                case .csv:
+                    try UsageExport.csv(buckets).write(to: url, atomically: true, encoding: .utf8)
+                case .json:
+                    try UsageExport.json(buckets).write(to: url, options: .atomic)
+                }
+            } catch {
+                if let window {
+                    NSAlert(error: error).beginSheetModal(for: window)
+                } else {
+                    NSApp.presentError(error)
+                }
             }
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.runModal()
+        }
+        if let window {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
         }
     }
 

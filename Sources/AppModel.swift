@@ -41,7 +41,10 @@ final class AppModel: ObservableObject {
         buckets.first(where: { $0.id == selectedBucketID }) ?? buckets.first
     }
     var selectedWindow: RateLimitWindow? { selectedBucket?.activeWindow }
-    var remainingPercent: Double? { selectedWindow?.remainingPercent }
+    var remainingPercent: Double? {
+        guard selectedWindow?.usedPercent != nil else { return nil }
+        return selectedWindow?.remainingPercent
+    }
     var latestDaily: DailyUsageBucket? { UsageStatistics.latest(snapshot?.usage.dailyUsageBuckets ?? []) }
     var dailyPercentPoints7: [DailyPercentPoint] {
         DailyPercentTracker.points(dailyPercentState, bucketID: selectedBucket?.id ?? "codex")
