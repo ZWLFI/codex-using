@@ -36,5 +36,5 @@ for attempt in {1..40}; do
 done
 
 /usr/bin/pgrep -fl GPTQuota
-printf '已安装 2.7，可回退备份：%s\n' "$backup_dir"
+printf '已安装 2.8，可回退备份：%s\n' "$backup_dir"
 

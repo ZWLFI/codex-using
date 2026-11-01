@@ -56,6 +56,10 @@ final class AppModel: ObservableObject {
         return Date().timeIntervalSince(fetchedAt) >= 15 * 60
     }
 
+    var dataState: QuotaDataState {
+        QuotaDataState.resolve(fetchedAt: snapshot?.fetchedAt, resetDate: selectedWindow?.resetDate, hasError: lastError != nil)
+    }
+
     var menuTitle: String {
         let remaining = DisplayFormat.percent(remainingPercent)
         switch settings.menuStyle {

@@ -7,6 +7,10 @@ struct DashboardView: View {
     @ObservedObject var settings: AppSettings
 
     var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { _ in content }
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             HStack {
                 Spacer().frame(maxWidth: .infinity)
@@ -44,7 +48,7 @@ struct DashboardView: View {
             Divider()
             HStack(spacing: 6) {
                 Circle().fill(statusColor).frame(width: 5, height: 5)
-                Text(statusText).lineLimit(1).help(model.refreshText)
+                Text(statusText).lineLimit(1).help(model.lastError ?? statusText)
                 Spacer()
                 if let bucket = model.selectedBucket {
                     Text("\(bucket.displayName) · \(bucket.planName)")
@@ -60,14 +64,14 @@ struct DashboardView: View {
 
     private var statusColor: Color {
         if model.lastError != nil { return .orange }
-        return model.dataIsStale ? .secondary : .green
+        return model.dataState == .current ? .green : .secondary
     }
 
     private var statusText: String {
         if model.isRefreshing { return "正在更新…" }
         if model.lastError != nil { return model.snapshot == nil ? "读取失败 · 点击刷新重试" : "更新失败 · 显示缓存" }
         guard let snapshot = model.snapshot else { return "等待数据" }
-        if model.dataIsStale { return "缓存数据 · \(DisplayFormat.dateTime.string(from: snapshot.fetchedAt))" }
+        if model.dataState != .current { return "\(model.dataState.title) · \(DisplayFormat.dateTime.string(from: snapshot.fetchedAt))" }
         return "更新于 \(DisplayFormat.dateTime.string(from: snapshot.fetchedAt))"
     }
 }
@@ -77,7 +81,7 @@ struct OverviewView: View {
 
     private var window: RateLimitWindow? { model.selectedWindow }
     private var remaining: Double? { window?.usedPercent.map { max(0, min(100, 100 - $0)) } }
-    private var isCurrent: Bool { model.lastError == nil && !model.dataIsStale }
+    private var isCurrent: Bool { model.dataState == .current }
     private var tint: Color {
         guard isCurrent else { return .secondary }
         if model.risk == .critical { return .red }
@@ -152,7 +156,7 @@ struct OverviewView: View {
                 summaryRow("重置", icon: "arrow.counterclockwise") {
                     if let reset = window?.resetDate {
                         TimelineView(.periodic(from: .now, by: 60)) { context in
-                            Text(DisplayFormat.countdown(to: reset, now: context.date))
+                            Text(reset <= context.date ? "等待更新" : DisplayFormat.countdown(to: reset, now: context.date))
                         }
                         .help(DisplayFormat.dateTime.string(from: reset))
                     } else {
@@ -327,58 +331,6 @@ struct HistoryView: View {
     }
 }
 
-struct HistoryChart: View {
-    let points: [DayPoint]
-    let title: String
-    var height: CGFloat = 145
-
-    private var available: [DayPoint] { points.filter { $0.tokens != nil } }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(title).font(.system(size: 11, weight: .semibold))
-                Spacer()
-                Text(available.last.map { "截至 \(DisplayFormat.day.string(from: $0.date))" } ?? "")
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-            if available.isEmpty {
-                Label("暂无历史记录", systemImage: "chart.bar.xaxis")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity).frame(height: height)
-            } else {
-                Chart(available) { point in
-                    BarMark(
-                        x: .value("日期", point.date, unit: .day),
-                        y: .value("Token", point.tokens ?? 0)
-                    )
-                    .foregroundStyle(Color.accentColor.opacity(0.75))
-                    .cornerRadius(2)
-                    .accessibilityLabel(DisplayFormat.day.string(from: point.date))
-                    .accessibilityValue("\(point.tokens ?? 0) token")
-                }
-                .chartYScale(domain: 0...max(1, Double(available.compactMap(\.tokens).max() ?? 0) * 1.12))
-                .chartYAxis {
-                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
-                        AxisGridLine().foregroundStyle(.primary.opacity(0.06))
-                        AxisValueLabel {
-                            if let raw = value.as(Int64.self) { Text(DisplayFormat.tokens(raw)) }
-                        }
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: min(7, available.count))) { _ in
-                        AxisValueLabel(format: .dateTime.month().day())
-                    }
-                }
-                .chartPlotStyle { plot in plot.padding(.top, 4) }
-                .frame(height: height)
-                .accessibilityLabel("\(title)图表")
-            }
-        }
-    }
-}
-
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var settings: AppSettings
@@ -432,6 +384,12 @@ struct SettingsView: View {
                 HStack {
                     Text("登录时自动启动")
                     Spacer()
+                    if settings.launchStatus != "已启用", settings.launchStatus != "未启用" {
+                        Text(settings.launchStatus == "需在系统设置中批准" ? "待批准" : "不可用")
+                            .font(.system(size: 10)).foregroundStyle(.orange)
+                            .help(settings.launchStatus)
+                            .accessibilityLabel(settings.launchStatus)
+                    }
                     Toggle("登录时自动启动", isOn: Binding(get: { settings.launchAtLogin }, set: settings.setLaunchAtLogin))
                         .labelsHidden().toggleStyle(.switch).controlSize(.small)
                 }

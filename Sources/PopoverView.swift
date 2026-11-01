@@ -5,7 +5,7 @@ struct MenuBarContentView: View {
     @ObservedObject var model: AppModel
     @Environment(\.openWindow) private var openWindow
 
-    private var hasCurrentData: Bool { model.lastError == nil && !model.dataIsStale }
+    private var hasCurrentData: Bool { model.dataState == .current }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -117,7 +117,7 @@ struct MenuBarContentView: View {
 
     private func shortCountdown(to date: Date?, now: Date) -> String {
         guard let date else { return "—" }
-        if date <= now { return "即将重置" }
+        if date <= now { return "等待更新" }
         return DisplayFormat.countdown(to: date, now: now)
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "小时", with: "时")
@@ -139,7 +139,7 @@ struct MenuBarContentView: View {
                 .fill(model.lastError != nil ? Color.orange : (hasCurrentData ? Color.green : Color.secondary))
                 .frame(width: 4, height: 4).accessibilityHidden(true)
             Text(updateLabel).font(.system(size: 10)).foregroundStyle(.secondary)
-                .help(model.refreshText).accessibilityLabel(model.refreshText)
+                .help(statusHelp).accessibilityLabel(statusHelp)
             Spacer()
             Button { openDashboard(.overview) } label: {
                 HStack(spacing: 4) {
@@ -156,8 +156,14 @@ struct MenuBarContentView: View {
         if model.isRefreshing { return "更新中" }
         if model.lastError != nil { return model.snapshot == nil ? "读取失败" : "更新失败 · 缓存" }
         guard let date = model.snapshot?.fetchedAt else { return "等待数据" }
-        if model.dataIsStale { return "缓存数据" }
+        if model.dataState != .current { return model.dataState.title }
         return date.formatted(.dateTime.hour().minute()) + " 更新"
+    }
+
+    private var statusHelp: String {
+        if let error = model.lastError { return "\(updateLabel)：\(error)" }
+        guard let date = model.snapshot?.fetchedAt else { return updateLabel }
+        return "\(updateLabel)，上次读取 \(DisplayFormat.dateTime.string(from: date))"
     }
 
     private func openDashboard(_ tab: DashboardTab) {
@@ -170,15 +176,24 @@ struct MenuBarContentView: View {
 struct WeeklyPercentChart: View {
     let points: [DailyPercentPoint]
     var openHistory: (() -> Void)? = nil
-    private let plotHeight: CGFloat = 48
+    @State private var hoveredKey: String?
+    private let plotHeight: CGFloat = 60
     private var scaleMaximum: Double { max(10, points.compactMap(\.value).max() ?? 0) }
+    private var inspectedPoint: DailyPercentPoint? {
+        points.first { $0.key == hoveredKey } ?? points.last
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("每日消耗").font(.system(size: 11, weight: .medium))
-                Text("近 7 天").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("近 7 天消耗").font(.system(size: 11, weight: .medium))
+                    .help("本地观测的配额消耗；— 表示未记录。")
                 Spacer()
+                if let point = inspectedPoint {
+                    Text("\(Calendar.current.isDateInToday(point.date) ? "今天" : DisplayFormat.day.string(from: point.date)) · \(point.value.map { DisplayFormat.observedPercent($0) } ?? "未记录")")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.accentColor).monospacedDigit()
+                }
                 if let openHistory {
                     Button(action: openHistory) { Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)) }
                         .buttonStyle(.borderless).accessibilityLabel("用量历史")
@@ -187,14 +202,12 @@ struct WeeklyPercentChart: View {
             HStack(alignment: .bottom, spacing: 10) {
                 ForEach(points) { point in
                     let today = Calendar.current.isDateInToday(point.date)
+                    let selected = point.key == inspectedPoint?.key
                     VStack(spacing: 5) {
-                        Text(DisplayFormat.percent(point.value))
-                            .font(.system(size: 10, weight: today ? .semibold : .regular))
-                            .foregroundStyle(today ? Color.accentColor : Color.secondary).monospacedDigit()
                         ZStack(alignment: .bottom) {
                             if let value = point.value {
                                 RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.accentColor.opacity(today ? 1 : 0.28))
+                                    .fill(Color.accentColor.opacity(selected ? 1 : 0.28))
                                     .frame(height: max(2, plotHeight * CGFloat(max(0, value) / scaleMaximum)))
                             } else {
                                 Capsule().fill(.secondary.opacity(0.2)).frame(width: 7, height: 2)
@@ -202,15 +215,20 @@ struct WeeklyPercentChart: View {
                         }
                         .frame(width: 19, height: plotHeight, alignment: .bottom)
                         Text(today ? "今天" : point.date.formatted(.dateTime.month(.twoDigits).day(.twoDigits)))
-                            .font(.system(size: 9)).foregroundStyle(today ? Color.primary : Color.secondary)
+                            .font(.system(size: 9)).foregroundStyle(selected ? Color.primary : Color.secondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .help("\(DisplayFormat.day.string(from: point.date)) · \(point.value.map { DisplayFormat.percent($0) } ?? "未记录")")
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside { hoveredKey = point.key }
+                        else if hoveredKey == point.key { hoveredKey = nil }
+                    }
+                    .help("\(DisplayFormat.day.string(from: point.date)) · \(point.value.map { DisplayFormat.observedPercent($0) } ?? "未记录")")
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(DisplayFormat.day.string(from: point.date))，\(point.value.map { "消耗 \(DisplayFormat.percent($0))" } ?? "未记录")")
+                    .accessibilityLabel("\(DisplayFormat.day.string(from: point.date))，\(point.value.map { "消耗 \(DisplayFormat.observedPercent($0))" } ?? "未记录")")
                 }
             }
         }
-        .help("本地观测的配额消耗；— 表示未记录。")
+        .onChange(of: points) { _ in hoveredKey = nil }
     }
 }

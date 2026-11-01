@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 enum StatusItemArtwork {
@@ -69,8 +70,11 @@ struct StatusLabel: View {
     @ObservedObject var model: AppModel
     @ObservedObject var settings: AppSettings
     @Environment(\.openWindow) private var openWindow
+    @State private var statusDate = Date()
+    private let clock = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
+        // TimelineView inside a MenuBarExtra label can repeatedly invalidate its host.
         Image(nsImage: StatusItemArtwork.image(
             style: settings.menuStyle,
             remaining: model.remainingPercent,
@@ -78,6 +82,9 @@ struct StatusLabel: View {
         ))
         .interpolation(.high)
         .frame(height: 22)
+        .accessibilityLabel(statusDescription)
+        .help(statusDescription)
+        .onReceive(clock) { statusDate = $0 }
         .onAppear {
             model.start()
             if CommandLine.arguments.contains("--show-dashboard") {
@@ -85,7 +92,13 @@ struct StatusLabel: View {
                 openWindow(id: "dashboard")
             }
         }
-        .accessibilityLabel("GPT 用量，剩余 \(DisplayFormat.percent(model.remainingPercent))，\(model.risk.title)")
+    }
+
+    private var statusDescription: String {
+        let state = QuotaDataState.resolve(fetchedAt: model.snapshot?.fetchedAt,
+                                          resetDate: model.selectedWindow?.resetDate,
+                                          hasError: model.lastError != nil, now: statusDate)
+        let status = state == .current ? model.risk.title : state.title
+        return "GPT 用量，剩余 \(DisplayFormat.percent(model.remainingPercent))，\(status)"
     }
 }
-

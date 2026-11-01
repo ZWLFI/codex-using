@@ -142,6 +142,39 @@ enum SelfTest {
         )
         precondition(dailyPoints.count == 7)
         precondition(dailyPoints.last?.value == 15)
+
+        // A reset invalidates the displayed forecast even when its snapshot is recent.
+        let futureReset = now.addingTimeInterval(3_600)
+        precondition(QuotaDataState.resolve(fetchedAt: now, resetDate: futureReset, hasError: false, now: now) == .current)
+        precondition(QuotaDataState.resolve(fetchedAt: now, resetDate: now, hasError: false, now: now) == .resetPending)
+        precondition(QuotaDataState.resolve(fetchedAt: now, resetDate: futureReset, hasError: true, now: now) == .failed)
+        precondition(QuotaDataState.resolve(fetchedAt: nil, resetDate: nil, hasError: false, now: now) == .waiting)
+        precondition(QuotaDataState.resolve(fetchedAt: nil, resetDate: nil, hasError: true, now: now) == .failed)
+        precondition(QuotaDataState.resolve(fetchedAt: now.addingTimeInterval(-900), resetDate: futureReset, hasError: false, now: now) == .cached)
+
+        let firstDay = DayKey.date(from: "2026-11-01", calendar: calendar)!
+        let missingDay = calendar.date(byAdding: .day, value: 1, to: firstDay)!
+        let lastDay = calendar.date(byAdding: .day, value: 2, to: firstDay)!
+        let chartPoints = [
+            DayPoint(key: "2026-11-01", date: firstDay, tokens: 0),
+            DayPoint(key: "2026-11-03", date: lastDay, tokens: 100)
+        ]
+        precondition(UsageChartSelection.point(on: firstDay.addingTimeInterval(3_600), in: chartPoints, calendar: calendar)?.tokens == 0)
+        precondition(UsageChartSelection.point(on: missingDay, in: chartPoints, calendar: calendar) == nil)
+        precondition(UsageChartSelection.point(on: firstDay, in: [], calendar: calendar) == nil)
+        let singleDomain = UsageChartSelection.domain(for: [chartPoints[0]], calendar: calendar)!
+        precondition(singleDomain.lowerBound == calendar.startOfDay(for: firstDay))
+        precondition(singleDomain.upperBound == calendar.startOfDay(for: missingDay))
+        precondition(UsageChartSelection.domain(for: [], calendar: calendar) == nil)
+        precondition(DisplayFormat.observedPercent(0.4) == "0.4%")
+        precondition(DisplayFormat.observedPercent(1.25) == "1.25%")
+        precondition(DisplayFormat.observedPercent(0) == "0%")
+        precondition(DisplayFormat.observedPercent(nil) == "—")
+        let plot = CGRect(x: 30, y: 12, width: 240, height: 100)
+        precondition(UsageChartSelection.plotX(at: CGPoint(x: 31, y: 20), in: plot) == 1)
+        for outside in [CGPoint(x: 29, y: 20), CGPoint(x: 270, y: 20), CGPoint(x: 50, y: 11), CGPoint(x: 50, y: 112)] {
+            precondition(UsageChartSelection.plotX(at: outside, in: plot) == nil)
+        }
         print("self-test passed")
     }
 }

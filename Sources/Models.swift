@@ -193,6 +193,28 @@ enum DailyPercentTracker {
     }
 }
 
+enum QuotaDataState: Equatable {
+    case current, waiting, failed, cached, resetPending
+
+    static func resolve(fetchedAt: Date?, resetDate: Date?, hasError: Bool, now: Date = Date()) -> Self {
+        if hasError { return .failed }
+        guard let fetchedAt else { return .waiting }
+        if let resetDate, resetDate <= now { return .resetPending }
+        if now.timeIntervalSince(fetchedAt) >= 15 * 60 { return .cached }
+        return .current
+    }
+
+    var title: String {
+        switch self {
+        case .current: return "已更新"
+        case .waiting: return "等待数据"
+        case .failed: return "更新失败"
+        case .cached: return "缓存数据"
+        case .resetPending: return "重置待更新"
+        }
+    }
+}
+
 enum RiskLevel: String, Codable {
     case healthy
     case watch
@@ -296,6 +318,11 @@ enum DisplayFormat {
     static func percent(_ value: Double?) -> String {
         guard let value else { return "—" }
         return "\(Int(value.rounded()))%"
+    }
+
+    static func observedPercent(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return value.formatted(.number.precision(.fractionLength(0...2)).grouping(.never).locale(Locale(identifier: "en_US_POSIX"))) + "%"
     }
 
     static func countdown(to date: Date?, now: Date = Date()) -> String {

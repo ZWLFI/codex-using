@@ -133,7 +133,9 @@ final class AppSettings: ObservableObject {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
+            refreshLaunchStatus()
             launchStatus = error.localizedDescription
+            return
         }
         refreshLaunchStatus()
     }
