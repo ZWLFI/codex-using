@@ -26,39 +26,61 @@ struct HistoryChart: View {
     let title: String
     var height: CGFloat = 145
     @State private var inspectedDay: Date?
+    @State private var selectedDay: Date?
 
     private var available: [DayPoint] { points.filter { $0.tokens != nil } }
+    private var activeDay: Date? { inspectedDay ?? selectedDay }
+    private var readoutDay: Date? {
+        (activeDay ?? available.max(by: { $0.date < $1.date })?.date).map { Calendar.current.startOfDay(for: $0) }
+    }
     private var selectedPoint: DayPoint? {
-        inspectedDay.flatMap { UsageChartSelection.point(on: $0, in: points) }
+        readoutDay.flatMap { UsageChartSelection.point(on: $0, in: points) }
     }
     private var domain: ClosedRange<Date> {
         UsageChartSelection.domain(for: points) ?? Date()...Date()
     }
+    private var inspectionRange: ClosedRange<Date> {
+        let lastDay = Calendar.current.startOfDay(for: domain.upperBound.addingTimeInterval(-1))
+        return domain.lowerBound...max(domain.lowerBound, lastDay)
+    }
+    private var dateSelection: Binding<Date> {
+        Binding(
+            get: { readoutDay ?? domain.lowerBound },
+            set: {
+                inspectedDay = nil
+                selectedDay = Calendar.current.startOfDay(for: $0)
+            }
+        )
+    }
     private var selectedMidday: Date? {
-        guard let day = inspectedDay,
+        guard let day = activeDay,
               let next = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return nil }
         return day.addingTimeInterval(next.timeIntervalSince(day) / 2)
     }
     private var summary: String {
-        if let day = inspectedDay {
-            let value = selectedPoint?.tokens.map { "\($0.formatted()) token" } ?? "未记录"
-            return "\(DisplayFormat.day.string(from: day)) · \(value)"
-        }
-        return available.max(by: { $0.date < $1.date }).map { "截至 \(DisplayFormat.day.string(from: $0.date))" } ?? ""
+        selectedPoint?.tokens.map { "\($0.formatted()) token" } ?? "未记录"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(title).font(.system(size: 11, weight: .semibold))
+            HStack(spacing: 12) {
+                Text(title).font(UITheme.section)
                 Spacer(minLength: 12)
-                Text(summary)
-                    .font(.system(size: 10)).monospacedDigit().lineLimit(1)
-                    .foregroundStyle(inspectedDay == nil ? Color.secondary : Color.primary)
+                if !available.isEmpty {
+                    DatePicker("查看日期", selection: dateSelection, in: inspectionRange, displayedComponents: .date)
+                        .labelsHidden().datePickerStyle(.field).controlSize(.small)
+                        .fixedSize()
+                        .help("选择日期查看精确用量")
+                    Text(summary)
+                        .font(UITheme.caption).monospacedDigit().lineLimit(1)
+                        .foregroundStyle(Color.primary)
+                        .help(summary)
+                        .accessibilityLabel("\(readoutDay.map { DisplayFormat.day.string(from: $0) } ?? "")，\(summary)")
+                }
             }
             if available.isEmpty {
                 Label("暂无历史记录", systemImage: "chart.bar.xaxis")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .font(UITheme.body).foregroundStyle(UITheme.secondaryText)
                     .frame(maxWidth: .infinity).frame(height: height)
             } else {
                 Chart {
@@ -67,14 +89,14 @@ struct HistoryChart: View {
                             x: .value("日期", point.date, unit: .day),
                             y: .value("Token", point.tokens ?? 0)
                         )
-                        .foregroundStyle(Color.accentColor.opacity(barOpacity(for: point)))
+                        .foregroundStyle(UITheme.accent.opacity(barOpacity(for: point)))
                         .cornerRadius(2)
                         .accessibilityLabel(DisplayFormat.day.string(from: point.date))
                         .accessibilityValue("\(point.tokens ?? 0) token")
                     }
                     if let date = selectedMidday {
                         RuleMark(x: .value("查看日期", date))
-                            .foregroundStyle(Color.secondary.opacity(0.45))
+                            .foregroundStyle(UITheme.secondaryText.opacity(0.7))
                             .lineStyle(StrokeStyle(lineWidth: 0.7))
                             .accessibilityHidden(true)
                     }
@@ -83,17 +105,22 @@ struct HistoryChart: View {
                 .chartYScale(domain: 0...max(1, Double(available.compactMap(\.tokens).max() ?? 0) * 1.12))
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
-                        AxisGridLine().foregroundStyle(.primary.opacity(0.06))
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.primary.opacity(0.12))
                         AxisValueLabel {
-                            if let raw = value.as(Int64.self) { Text(DisplayFormat.tokens(raw)) }
+                            if let raw = value.as(Int64.self) {
+                                Text(DisplayFormat.tokens(raw))
+                                    .font(UITheme.caption).foregroundStyle(UITheme.secondaryText)
+                            }
                         }
                     }
                 }
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: min(7, max(2, points.count)))) { value in
                         AxisValueLabel(anchor: value.index == value.count - 1 ? .topTrailing : .topLeading) {
-                            if let date = value.as(Date.self) {
+                            if let date = value.as(Date.self), date < domain.upperBound {
                                 Text(date, format: .dateTime.month().day()).fixedSize()
+                                    .font(UITheme.caption).foregroundStyle(UITheme.secondaryText)
                             }
                         }
                     }
@@ -110,6 +137,7 @@ struct HistoryChart: View {
                             }
                             .gesture(SpatialTapGesture().onEnded { event in
                                 inspect(event.location, proxy: proxy, geometry: geometry)
+                                selectedDay = inspectedDay
                             })
                             .accessibilityHidden(true)
                     }
@@ -118,12 +146,15 @@ struct HistoryChart: View {
                 .accessibilityLabel("\(title)图表")
             }
         }
-        .onChange(of: points) { _ in inspectedDay = nil }
+        .onChange(of: points.map(\.key)) { _ in
+            inspectedDay = nil
+            selectedDay = nil
+        }
     }
 
     private func barOpacity(for point: DayPoint) -> Double {
-        guard inspectedDay != nil else { return 0.75 }
-        return selectedPoint?.id == point.id ? 1 : 0.35
+        guard activeDay != nil else { return 0.85 }
+        return selectedPoint?.id == point.id ? 1 : 0.45
     }
 
     private func inspect(_ location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {

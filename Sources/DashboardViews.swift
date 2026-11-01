@@ -1,5 +1,4 @@
 import AppKit
-import Charts
 import SwiftUI
 
 struct DashboardView: View {
@@ -12,30 +11,28 @@ struct DashboardView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer().frame(maxWidth: .infinity)
+            HStack(spacing: 16) {
                 Picker("页面", selection: $model.dashboardTab) {
                     Text("概览").tag(DashboardTab.overview)
                     Text("历史").tag(DashboardTab.history)
                     Text("设置").tag(DashboardTab.settings)
                 }
                 .labelsHidden().pickerStyle(.segmented).frame(width: 228)
-                HStack(spacing: 10) {
-                    Spacer()
-                    if model.isRefreshing {
-                        ProgressView().controlSize(.small).scaleEffect(0.7)
-                            .frame(width: 16, height: 16)
-                    }
-                    Button(action: model.refresh) {
+                Spacer()
+                Button(action: model.refresh) {
+                    ZStack {
                         Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .medium))
+                            .opacity(model.isRefreshing ? 0 : 1)
+                        if model.isRefreshing { ProgressView().controlSize(.small) }
                     }
-                    .buttonStyle(.borderless).disabled(model.isRefreshing)
-                    .accessibilityLabel("刷新用量").help("刷新用量 ⌘R")
-                    .keyboardShortcut("r", modifiers: .command)
+                    .frame(width: 28, height: 28).contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.borderless).disabled(model.isRefreshing)
+                .accessibilityLabel(model.isRefreshing ? "正在刷新用量" : "刷新用量")
+                .help("刷新用量 ⌘R").keyboardShortcut("r", modifiers: .command)
             }
-            .padding(.horizontal, 20).padding(.vertical, 12)
+            .padding(.horizontal, 20).padding(.vertical, 10)
             Divider()
             Group {
                 switch model.dashboardTab {
@@ -47,7 +44,7 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             HStack(spacing: 6) {
-                Circle().fill(statusColor).frame(width: 5, height: 5)
+                Circle().fill(statusColor).frame(width: 5, height: 5).accessibilityHidden(true)
                 Text(statusText).lineLimit(1).help(model.lastError ?? statusText)
                 Spacer()
                 if let bucket = model.selectedBucket {
@@ -55,16 +52,19 @@ struct DashboardView: View {
                         .lineLimit(1)
                 }
             }
-            .font(.system(size: 10)).foregroundStyle(.secondary)
+            .font(UITheme.caption).foregroundStyle(UITheme.secondaryText)
             .padding(.horizontal, 20).padding(.vertical, 8)
         }
         .frame(minWidth: 720, minHeight: 500)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(UITheme.shell)
+        .preferredColorScheme(.dark)
+        .environment(\.colorScheme, .dark)
+        .tint(UITheme.accent)
     }
 
     private var statusColor: Color {
-        if model.lastError != nil { return .orange }
-        return model.dataState == .current ? .green : .secondary
+        if model.lastError != nil { return UITheme.warning }
+        return model.dataState == .current ? UITheme.positive : UITheme.secondaryText
     }
 
     private var statusText: String {
@@ -83,22 +83,21 @@ struct OverviewView: View {
     private var remaining: Double? { window?.usedPercent.map { max(0, min(100, 100 - $0)) } }
     private var isCurrent: Bool { model.dataState == .current }
     private var tint: Color {
-        guard isCurrent else { return .secondary }
-        if model.risk == .critical { return .red }
-        if model.risk == .watch { return .orange }
-        return .accentColor
+        guard isCurrent else { return UITheme.secondaryText }
+        if model.risk == .critical { return UITheme.critical }
+        if model.risk == .watch { return UITheme.warning }
+        return UITheme.accent
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 quotaSummary
-                Divider()
                 HistoryChart(
                     points: UsageStatistics.dayPoints(buckets: model.snapshot?.usage.dailyUsageBuckets ?? [], days: 30),
-                    title: "近 30 日用量", height: 145
+                    title: "近 30 日用量", height: 128
                 )
-                Divider()
+                .insetSurface()
                 HStack(spacing: 20) {
                     DashboardMetric(title: "累计 token", value: DisplayFormat.tokens(model.summary?.lifetimeTokens))
                     DashboardMetric(title: "单日峰值", value: DisplayFormat.tokens(model.summary?.peakDailyTokens))
@@ -107,85 +106,74 @@ struct OverviewView: View {
                 }
                 .help(model.insight)
             }
-            .padding(22)
+            .padding(20)
         }
     }
 
     private var quotaSummary: some View {
-        HStack(alignment: .center, spacing: 30) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    if model.buckets.count > 1 {
-                        Picker("配额", selection: Binding(
-                            get: { model.selectedBucket?.id ?? "" }, set: model.selectBucket
-                        )) {
-                            ForEach(model.buckets) { Text($0.displayName).tag($0.id) }
-                        }
-                        .labelsHidden().pickerStyle(.menu).lineLimit(1)
-                        .frame(maxWidth: 180)
-                    } else {
-                        Text(model.selectedBucket?.displayName ?? "当前配额")
-                            .font(.system(size: 12, weight: .semibold))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                if model.buckets.count > 1 {
+                    Picker("配额", selection: Binding(
+                        get: { model.selectedBucket?.id ?? "" }, set: model.selectBucket
+                    )) {
+                        ForEach(model.buckets) { Text($0.displayName).tag($0.id) }
                     }
-                    Text(cycleName(window)).font(.system(size: 10)).foregroundStyle(.secondary)
+                    .labelsHidden().pickerStyle(.menu).controlSize(.small)
+                    .frame(maxWidth: 180, alignment: .leading)
+                } else {
+                    Text(model.selectedBucket?.displayName ?? "当前配额").font(UITheme.section)
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text(remaining.map { String(Int($0.rounded())) } ?? "—")
-                        .font(.system(size: 52, weight: .medium, design: .rounded)).monospacedDigit()
-                    if remaining != nil {
-                        Text("%").font(.system(size: 20, weight: .medium)).foregroundStyle(.secondary)
-                    }
-                    Text("剩余").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                ProgressView(value: remaining ?? 0, total: 100)
-                    .tint(tint).frame(maxWidth: 280)
-                    .accessibilityLabel("剩余配额")
-                    .accessibilityValue(DisplayFormat.percent(remaining))
-                HStack {
-                    Text("已用 \(DisplayFormat.percent(window?.usedPercent))")
-                    Spacer()
-                    if isCurrent, remaining != nil, model.risk != .unknown {
-                        Text(remaining == 0 ? "已用尽" : model.risk.title).foregroundStyle(tint)
-                    }
-                }
-                .font(.system(size: 10)).foregroundStyle(.secondary).frame(maxWidth: 280)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 17) {
-                summaryRow("重置", icon: "arrow.counterclockwise") {
-                    if let reset = window?.resetDate {
-                        TimelineView(.periodic(from: .now, by: 60)) { context in
-                            Text(reset <= context.date ? "等待更新" : DisplayFormat.countdown(to: reset, now: context.date))
-                        }
-                        .help(DisplayFormat.dateTime.string(from: reset))
-                    } else {
-                        Text("—")
-                    }
-                }
-                summaryRow("预测", icon: "speedometer") {
-                    Text(forecastText).help(forecastHelp)
-                }
-                if let bucket = model.selectedBucket, bucket.primary != nil, let secondary = bucket.secondary {
-                    summaryRow(cycleName(secondary), icon: "calendar") {
-                        Text(secondary.usedPercent.map { "剩余 \(DisplayFormat.percent(max(0, min(100, 100 - $0))))" } ?? "—")
-                            .help(secondary.resetDate.map { "重置于 \(DisplayFormat.dateTime.string(from: $0))" } ?? "重置时间未知")
-                    }
-                } else if isCurrent, let forecast = model.forecast {
-                    summaryRow("速度", icon: "chart.line.uptrend.xyaxis") {
-                        Text("\(String(format: "%.2f", forecast.percentPerHour))% / 小时")
-                    }
+                Text(cycleName(window)).font(UITheme.caption).foregroundStyle(UITheme.secondaryText)
+                Text("已用 \(DisplayFormat.percent(window?.usedPercent))")
+                    .font(UITheme.caption).foregroundStyle(UITheme.secondaryText)
+                Spacer()
+                if isCurrent, remaining != nil, model.risk != .unknown {
+                    Label(remaining == 0 ? "已用尽" : model.risk.title,
+                          systemImage: remaining == 0 || model.risk != .healthy ? "exclamationmark.circle" : "checkmark.circle")
+                        .font(UITheme.caption).foregroundStyle(tint)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .center, spacing: 24) {
+                QuotaGauge(value: remaining, isCurrent: isCurrent, height: 160)
+                    .frame(maxWidth: .infinity)
+                Divider().frame(height: 120)
+                VStack(alignment: .leading, spacing: 10) {
+                    summaryRow("重置", icon: "arrow.counterclockwise") {
+                        if let reset = window?.resetDate {
+                            TimelineView(.periodic(from: .now, by: 60)) { context in
+                                Text(reset <= context.date ? "等待更新" : DisplayFormat.countdown(to: reset, now: context.date))
+                            }
+                            .help(DisplayFormat.dateTime.string(from: reset))
+                        } else {
+                            Text("—")
+                        }
+                    }
+                    summaryRow("预测", icon: "speedometer") {
+                        Text(forecastText).help(forecastHelp)
+                    }
+                    if let bucket = model.selectedBucket, bucket.primary != nil, let secondary = bucket.secondary {
+                        summaryRow(cycleName(secondary), icon: "calendar") {
+                            Text(secondary.usedPercent.map { "剩余 \(DisplayFormat.percent(max(0, min(100, 100 - $0))))" } ?? "—")
+                                .help(secondary.resetDate.map { "重置于 \(DisplayFormat.dateTime.string(from: $0))" } ?? "重置时间未知")
+                        }
+                    } else if isCurrent, let forecast = model.forecast {
+                        summaryRow("速度", icon: "chart.line.uptrend.xyaxis") {
+                            Text("\(String(format: "%.2f", forecast.percentPerHour))% / 小时")
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+        .insetSurface()
     }
 
     private func summaryRow<Content: View>(_ title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
             Label(title, systemImage: icon)
-                .font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 72, alignment: .leading)
-            content().font(.system(size: 13, weight: .medium)).lineLimit(1).minimumScaleFactor(0.85)
+                .font(UITheme.caption).foregroundStyle(UITheme.secondaryText).frame(width: 66, alignment: .leading)
+            content().font(UITheme.body).lineLimit(1).minimumScaleFactor(0.85)
         }
     }
 
@@ -225,8 +213,8 @@ private struct DashboardMetric: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
-            Text(value).font(.system(size: 19, weight: .medium, design: .rounded))
+            Text(title).font(UITheme.caption).foregroundStyle(UITheme.secondaryText)
+            Text(value).font(.system(size: 24, weight: .medium, design: .rounded))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -275,6 +263,7 @@ struct HistoryView: View {
                         ForEach(HistoryRange.allCases) { Text($0.rawValue).tag($0) }
                     }
                     .labelsHidden().pickerStyle(.segmented).frame(width: 250)
+                    .help("按最近 7、30 或 90 条已记录日数据筛选")
                     Spacer()
                     Menu {
                         Button("导出 CSV") { export(.csv) }
@@ -284,8 +273,8 @@ struct HistoryView: View {
                     }
                     .fixedSize().disabled(buckets.isEmpty)
                 }
-                HistoryChart(points: points, title: "每日 token", height: 170)
-                Divider()
+                HistoryChart(points: points, title: "每日 token", height: 156)
+                    .insetSurface()
                 HStack(spacing: 20) {
                     DashboardMetric(title: "总 token", value: buckets.isEmpty ? "—" : DisplayFormat.tokens(buckets.map(\.tokens).reduce(0, +)))
                     DashboardMetric(title: "日均", value: DisplayFormat.tokens(average))
@@ -298,24 +287,24 @@ struct HistoryView: View {
                     DisclosureGroup("每日明细") {
                         dailyRecords.padding(.top, 8)
                     }
-                    .font(.system(size: 11))
+                    .font(UITheme.body)
                 }
             }
-            .padding(22)
+            .padding(20)
         }
     }
 
     private var dailyRecords: some View {
-        VStack(spacing: 0) {
+        LazyVStack(spacing: 0) {
             ForEach(Array(buckets.reversed())) { bucket in
                 HStack {
                     Text(bucket.date.map { DisplayFormat.day.string(from: $0) } ?? bucket.startDate)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(UITheme.secondaryText)
                     Spacer()
                     Text(bucket.tokens.formatted()).monospacedDigit()
-                    Text("token").foregroundStyle(.tertiary)
+                    Text("token").foregroundStyle(UITheme.secondaryText)
                 }
-                .font(.system(size: 11)).padding(.vertical, 7)
+                .font(UITheme.body).padding(.vertical, 8)
                 Divider()
             }
         }
@@ -336,87 +325,82 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text("菜单栏样式")
-                    Spacer()
-                    Picker("菜单栏样式", selection: $settings.menuStyle) {
-                        ForEach(MenuDisplayStyle.allCases) { Text($0.title).tag($0) }
+        Form {
+            Section("外观") {
+                Picker("菜单栏样式", selection: $settings.menuStyle) {
+                    ForEach(MenuDisplayStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Section("通知") {
+                Toggle("配额与重置通知", isOn: $settings.notificationsEnabled)
+                    .toggleStyle(.switch)
+                    .onChange(of: settings.notificationsEnabled) { enabled in
+                        if enabled { model.requestNotificationAuthorization() }
                     }
-                    .labelsHidden().pickerStyle(.segmented).frame(width: 250)
+                LabeledContent("提醒阈值") {
+                    HStack(spacing: 16) {
+                        Toggle("70%", isOn: $settings.threshold70)
+                        Toggle("85%", isOn: $settings.threshold85)
+                        Toggle("95%", isOn: $settings.threshold95)
+                    }
+                    .toggleStyle(.checkbox).disabled(!settings.notificationsEnabled)
                 }
-                Divider()
-                HStack {
-                    Text("配额与重置通知")
-                    Spacer()
-                    Button("测试通知", action: model.sendTestNotification)
-                        .disabled(!settings.notificationsEnabled).controlSize(.small)
-                    Toggle("配额与重置通知", isOn: $settings.notificationsEnabled)
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                        .onChange(of: settings.notificationsEnabled) { enabled in
-                            if enabled { model.requestNotificationAuthorization() }
-                        }
-                }
-                HStack {
-                    Text("提醒阈值").foregroundStyle(.secondary)
-                    Spacer()
-                    Toggle("70%", isOn: $settings.threshold70)
-                    Toggle("85%", isOn: $settings.threshold85)
-                    Toggle("95%", isOn: $settings.threshold95)
-                }
-                .toggleStyle(.checkbox).disabled(!settings.notificationsEnabled)
-                HStack {
-                    Text("安静时段")
-                    Spacer()
-                    if settings.quietHoursEnabled {
+                Toggle("安静时段", isOn: $settings.quietHoursEnabled)
+                    .toggleStyle(.switch)
+                    .help("安静时段内暂停配额通知")
+                if settings.quietHoursEnabled {
+                    HStack(spacing: 24) {
                         DatePicker("开始", selection: minutesBinding($settings.quietStartMinutes), displayedComponents: .hourAndMinute)
-                            .labelsHidden().fixedSize()
-                        Text("至").foregroundStyle(.secondary)
                         DatePicker("结束", selection: minutesBinding($settings.quietEndMinutes), displayedComponents: .hourAndMinute)
-                            .labelsHidden().fixedSize()
                     }
-                    Toggle("安静时段", isOn: $settings.quietHoursEnabled)
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
                 }
-                .help("安静时段内暂停配额通知")
-                Divider()
-                HStack {
-                    Text("登录时自动启动")
-                    Spacer()
-                    if settings.launchStatus != "已启用", settings.launchStatus != "未启用" {
-                        Text(settings.launchStatus == "需在系统设置中批准" ? "待批准" : "不可用")
-                            .font(.system(size: 10)).foregroundStyle(.orange)
-                            .help(settings.launchStatus)
-                            .accessibilityLabel(settings.launchStatus)
-                    }
-                    Toggle("登录时自动启动", isOn: Binding(get: { settings.launchAtLogin }, set: settings.setLaunchAtLogin))
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                LabeledContent("通知测试") {
+                    Button("发送测试通知", action: model.sendTestNotification)
+                        .disabled(!settings.notificationsEnabled)
                 }
+            }
+
+            Section("系统") {
+                Toggle("登录时自动启动", isOn: Binding(
+                    get: { settings.launchAtLogin }, set: settings.setLaunchAtLogin
+                ))
+                .toggleStyle(.switch)
                 .help(settings.launchStatus)
-                Divider()
+                if settings.launchStatus != "已启用", settings.launchStatus != "未启用" {
+                    Label(settings.launchStatus, systemImage: "info.circle")
+                        .font(UITheme.caption).foregroundStyle(UITheme.warning)
+                }
+            }
+
+            Section {
                 DisclosureGroup("数据与隐私") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("只通过本机 Codex 读取用量，不读取凭据、会话或项目内容。")
                         Text(model.coverageText)
-                        Text(AppFiles.state.path).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                        Text(AppFiles.state.path)
+                            .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
                     }
-                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                    .font(UITheme.caption).foregroundStyle(UITheme.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
                 }
                 DisclosureGroup("诊断") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(model.diagnosticsText).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
-                        HStack {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(model.diagnosticsText)
+                            .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                        HStack(spacing: 12) {
                             Button("复制诊断", action: model.copyDiagnostics)
                             Button("立即刷新", action: model.refresh).disabled(model.isRefreshing)
                         }
-                        .controlSize(.small)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
                 }
             }
-            .font(.system(size: 12)).padding(22)
         }
+        .formStyle(.grouped)
+        .font(UITheme.body)
+        .scrollContentBackground(.hidden)
         .onAppear { settings.refreshLaunchStatus() }
     }
 

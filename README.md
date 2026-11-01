@@ -5,26 +5,32 @@
 [下载最新版](https://github.com/ZWLFI/codex-using/releases/latest)
 
 <p>
-  <img src="assets/screenshots/popover-light.png" width="344" alt="浅色菜单栏弹窗，示例数据">
-  <img src="assets/screenshots/popover-dark.png" width="344" alt="深色菜单栏弹窗，示例数据">
+  <img src="assets/screenshots/popover-dark.png" width="368" alt="深色仪表盘菜单栏弹窗，示例数据">
 </p>
+
+<details>
+  <summary>详情窗口</summary>
+  <img src="assets/screenshots/dashboard-dark.png" width="760" alt="配额仪表与历史图，示例数据">
+</details>
 
 截图使用示例数据。
 
 ## 功能
 
 - 菜单栏剩余百分比，紧凑弹窗显示重置时间和预计可用时长
-- 多配额切换、七日配额消耗图；每天百分比直接显示在柱形上方，历史图支持悬停或点击查看精确 token
+- 多配额切换、七日配额消耗图；每天百分比直接显示在柱形上方，历史图支持日期输入、悬停或点击查看精确 token
 - 每日 token 历史、CSV / JSON 导出；缺失日期保留空白
 - 配额阈值、重置和耗尽预测通知，支持安静时段
 - 本地缓存、登录时启动、手动刷新（⌘R）与诊断信息
-- 原生 SwiftUI 界面，适配浅色和深色外观
+- 原生 SwiftUI 琥珀色背光仪表盘、中央纯数字读数、金属指针与分段七日柱图，保留原生分组设置和键盘操作
+
+界面规范见 [设计系统](design-system/codex-using/MASTER.md)。
 
 ## 安装
 
 需要 **Apple Silicon Mac、macOS 13 或更新版本**，以及本机已登录的 Codex。当前发布包仅包含 `arm64` 架构。
 
-1. 从 [Releases](https://github.com/ZWLFI/codex-using/releases/latest) 下载 `codex-using-v2.8.1-macos-arm64.zip`。
+1. 从 [Releases](https://github.com/ZWLFI/codex-using/releases/latest) 下载 `codex-using-v2.9.0-macos-arm64.zip`。
 2. 解压，将「GPT 用量.app」拖入「应用程序」文件夹。
 3. 打开应用，点击菜单栏中的 GPT 读数。
 
@@ -63,4 +69,4 @@ cd codex-using
 
 ## 验证范围
 
-已完成本机构建、自检、深浅色与空数据渲染检查，以及实时数据读取、应用启动和页面切换验证。图表的日期选择、缺失值和零值已通过自检；本轮鼠标悬停尚未完成自动化实机验证。macOS 13 为构建最低目标版本，尚未逐一验证所有系统版本；系统通知和导出落盘尚未完成端到端回归。
+已完成本机构建、自检、系统深浅色下的固定深色界面、空数据、缓存与长数值渲染检查；仪表覆盖 0%、50%、100% 和无数据状态。语义文字与状态色在界面底色上的对比度均超过 4.5:1。实机验证了实时读取、弹窗进入详情、日期键盘输入和历史范围切换。图表的日期选择、缺失值和零值已通过自检；鼠标悬停未完成完整端到端回归。macOS 13 为构建最低目标版本，尚未逐一验证所有系统版本；系统通知和导出落盘尚未完成端到端回归。

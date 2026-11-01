@@ -88,8 +88,8 @@ struct StatusLabel: View {
         .onAppear {
             model.start()
             if CommandLine.arguments.contains("--show-dashboard") {
-                NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "dashboard")
+                NSApp.activate(ignoringOtherApps: true)
             }
         }
     }
